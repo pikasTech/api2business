@@ -118,6 +118,8 @@ test("降幅阈值按边界生效，平台总流量同等下降不触发", () =>
   expect(dropped.records[0]).toMatchObject({ classification: "consumption-stalled", reasonCodes: ["consumption-drop-exceeded"] });
   const steady = evaluate([account({ previousRecords: 1, previousCostUsd: 10, previousCostKnownRecords: 1, currentRecords: 1, currentCostUsd: 9, currentCostKnownRecords: 1 })], [wallet()]);
   expect(steady.summary.healthy).toBe(1);
+  expect(steady.records).toHaveLength(1);
+  expect(steady.records[0]).toMatchObject({ classification: "healthy", reasonCodes: [] });
   const trafficDrop = evaluate([account()], [wallet()], [
     { groupId: 2, platform: "openai", window: "current", model: "gpt-5.6-sol", requests: 1 },
     { groupId: 2, platform: "openai", window: "previous", model: "gpt-5.6-sol", requests: 100 },

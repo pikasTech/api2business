@@ -410,9 +410,9 @@ export function evaluateConsumptionStalls(input: {
 
     if (classification === "healthy") {
       counts.healthy++;
-      continue;
+    } else {
+      counts[classification === "consumption-stalled" ? "consumptionStalled" : classification === "demand-insufficient" ? "demandInsufficient" : classification]++;
     }
-    counts[classification === "consumption-stalled" ? "consumptionStalled" : classification === "demand-insufficient" ? "demandInsufficient" : classification]++;
     records.push({
       accountId: account.accountId,
       walletKey,
