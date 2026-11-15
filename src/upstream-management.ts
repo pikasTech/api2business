@@ -610,7 +610,11 @@ export class UpstreamManagementService {
 
   async syncModels(accountIds: number[]): Promise<Record<string, unknown>> {
     if (!this.runtime) throw new Error("Api2Business Sub2API runtime mutation service 不可用");
-    return await this.runtime.syncUpstreamModels(accountIds, this.config.operations.upstreamManagement.mutationTimeoutMs);
+    return await this.runtime.syncUpstreamModels(
+      accountIds,
+      this.config.operations.upstreamManagement.mutationTimeoutMs,
+      this.config.operations.upstreamSchedulingV2?.modelSyncPolicy,
+    );
   }
 
   async updateModelAlias(accountId: number, model: string, target: string): Promise<Record<string, unknown>> {

@@ -11,6 +11,7 @@ import { reconcileGatewayServicePolicy } from "./gateway-service-policy";
 import type { AppConfig } from "./config";
 import type { Sub2ApiReadClient } from "./sub2api-read-executor";
 import { collectSchedulingRuntime } from "./scheduling-runtime-evidence";
+import { normalizeModelMapping, type ModelSyncPolicy } from "./model-sync-policy";
 
 type Row = Record<string, unknown>;
 
@@ -128,7 +129,11 @@ export class Sub2ApiRuntimeService {
     };
   }
 
-  async syncUpstreamModels(accountIds: number[], timeoutMs?: number): Promise<Record<string, unknown>> {
+  async syncUpstreamModels(
+    accountIds: number[],
+    timeoutMs?: number,
+    modelSyncPolicy?: ModelSyncPolicy,
+  ): Promise<Record<string, unknown>> {
     const ids = [...new Set(accountIds)].sort((left, right) => left - right);
     if (ids.length === 0 || ids.some((id) => !Number.isSafeInteger(id) || id < 1)) {
       throw new Error("model sync requires stable positive account IDs");
@@ -137,8 +142,6 @@ export class Sub2ApiRuntimeService {
     for (const accountId of ids) {
       const before = await this.client.getAccount(accountId, timeoutMs);
       const beforeCredentials = record(before?.credentials) ?? {};
-      const beforeStableCredentials = { ...beforeCredentials };
-      delete beforeStableCredentials.model_mapping;
       const beforeMapping = record(beforeCredentials.model_mapping) ?? {};
       const result = await this.client.mutate<Record<string, unknown>>(
         "POST", `/admin/accounts/${accountId}/models/sync-upstream`, undefined, undefined, timeoutMs,
@@ -152,6 +155,19 @@ export class Sub2ApiRuntimeService {
       if (models.length === 0) {
         throw new Error(`upstream model sync returned no models for account ${accountId}`);
       }
+      const platform = typeof before?.platform === "string" ? before.platform : "";
+      const mapping = normalizeModelMapping(models, platform, modelSyncPolicy);
+
+      // Model discovery also refreshes upstream metadata such as extra.upstream_model_metadata.
+      // Use the post-discovery account as the mutation baseline so only the following bulk
+      // mapping merge is checked for unrelated field changes.
+      const discoveryBaseline = await this.client.getAccount(accountId, timeoutMs);
+      const discoveryCredentials = record(discoveryBaseline?.credentials) ?? {};
+      const discoveryStableCredentials = { ...discoveryCredentials };
+      delete discoveryStableCredentials.model_mapping;
+      const discoveryStableAccount = { ...(discoveryBaseline ?? {}) };
+      delete discoveryStableAccount.credentials;
+      delete discoveryStableAccount.updated_at;
 
       // The native single-account PUT treats credentials as a partial merge only
       // for sensitive keys. Non-sensitive keys such as base_url would be dropped.
@@ -160,7 +176,7 @@ export class Sub2ApiRuntimeService {
       // credential and account column.
       const bulkResult = await this.client.mutate<Record<string, unknown>>(
         "POST", "/admin/accounts/bulk-update",
-        { account_ids: [accountId], credentials: { model_mapping: Object.fromEntries(models.map((model) => [model, model])) } },
+        { account_ids: [accountId], credentials: { model_mapping: mapping } },
         undefined, timeoutMs,
       );
       const failed = Number(bulkResult.failed ?? 0);
@@ -176,23 +192,37 @@ export class Sub2ApiRuntimeService {
       const afterCredentials = record(after?.credentials) ?? {};
       const afterStableCredentials = { ...afterCredentials };
       delete afterStableCredentials.model_mapping;
-      if (canonicalJson(beforeStableCredentials) !== canonicalJson(afterStableCredentials)) {
+      const afterStableAccount = { ...(after ?? {}) };
+      delete afterStableAccount.credentials;
+      delete afterStableAccount.updated_at;
+      if (canonicalJson(discoveryStableAccount) !== canonicalJson(afterStableAccount)) {
+        throw new Error(`upstream model mapping update changed non-mapping account fields for account ${accountId}`);
+      }
+      if (canonicalJson(discoveryStableCredentials) !== canonicalJson(afterStableCredentials)) {
         throw new Error(`upstream model mapping update changed non-mapping credentials for account ${accountId}`);
       }
       const persistedMapping = record(afterCredentials.model_mapping) ?? {};
-      const missingModels = models.filter((model) => persistedMapping[model] !== model);
-      if (missingModels.length > 0) {
-        throw new Error(`upstream model mapping verification failed for account ${accountId}: ${missingModels.join(", ")}`);
+      if (canonicalJson(persistedMapping) !== canonicalJson(mapping)) {
+        throw new Error(`upstream model mapping verification failed for account ${accountId}`);
       }
 
       const changedModelCount = [...new Set([...Object.keys(beforeMapping), ...Object.keys(persistedMapping)])]
         .filter((model) => String(beforeMapping[model] ?? "") !== String(persistedMapping[model] ?? "")).length;
+      const canonicalMappings = modelSyncPolicy
+        ? Object.entries(modelSyncPolicy.canonicalModels)
+            .filter(([canonical]) => mapping[canonical] !== undefined)
+            .map(([canonical]) => ({ canonical, value: mapping[canonical] }))
+        : [];
 
       results.push({
         accountId,
+        platform: platform || null,
         modelCountBefore: Object.keys(beforeMapping).length,
-        modelCount: models.length,
+        modelCount: Object.keys(mapping).length,
         models,
+        mappingBefore: beforeMapping,
+        mappingAfter: persistedMapping,
+        canonicalMappings,
         changedModelCount,
         persisted: true,
         writeMode: "native-bulk-merge",
