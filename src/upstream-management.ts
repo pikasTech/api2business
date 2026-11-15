@@ -1269,7 +1269,7 @@ export class UpstreamManagementService {
         FROM accounts a
         WHERE a.deleted_at IS NULL
           AND LOWER(a.type) = 'apikey'
-          AND LOWER(a.platform) IN ('openai', 'anthropic', 'grok', 'deepseek')
+          AND LOWER(a.platform) IN ('openai', 'anthropic', 'grok', 'deepseek', 'opencode_go')
           AND NULLIF(a.credentials->>'base_url', '') IS NOT NULL
           AND ($1::text = '' OR a.id = ANY(string_to_array($1::text, $2::text)::bigint[]))
         ORDER BY a.id`,
