@@ -19,6 +19,11 @@ rules:
   - no available channel for model
   durationMinutes: 3
   description: 上游无法提供预期模型能力（包括 gpt-6.1-sol）时短暂冷却当前账号并切号
+- errorCode: 404
+  keywords:
+  - upstream request failed
+  durationMinutes: 3
+  description: 上游 404 且正文为统一包装 upstream request failed 时短暂冷却当前账号并切号
 - errorCode: 422
   keywords:
   - upstream request failed
@@ -64,6 +69,7 @@ rules:
   - no tool call found for function call output
   - stream_required
   - 'streaming is required: this endpoint only accepts "stream": true'
+  - This group only supports streaming generation requests. Set stream to true.
   - 'The ''gpt-5.5'' model is not supported when using Codex with a ChatGPT account.'
   - 'The ''gpt-5.4-mini'' model is not supported when using Codex with a ChatGPT account.'
   - Model gpt-5.4-mini has not been priced by the administrator yet.

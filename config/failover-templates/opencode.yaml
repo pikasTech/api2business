@@ -1,0 +1,38 @@
+apiVersion: api2business.pikapython.com/v1
+kind: FailoverTemplate
+name: opencode-go-upstream-failover
+platform: opencode_go
+rules:
+- errorCode: 400
+  keywords:
+  - "This Go model requires Global regions. Select Global in your workspace's Privacy settings to use it."
+  - "Extra inputs are not permitted, field: 'verbosity'"
+  durationMinutes: 3
+  description: OpenCode Go 明确要求 Global 区域或拒绝 verbosity 参数时短暂切号
+- errorCode: 429
+  keywords:
+  - "Go usage limit exceeded"
+  - "Upstream request failed: [prefill_cap_refused] the cell is at capacity; retry shortly (after 5 s)"
+  - "Upstream request failed: [overloaded] the server is overloaded; retry shortly"
+  durationMinutes: 3
+  description: OpenCode Go 用量达到上限或 prefill 容量拒绝时短暂切号
+- errorCode: 503
+  keywords:
+  - "Upstream request failed: Endpoint is unavailable."
+  durationMinutes: 3
+  description: OpenCode Go 上游端点明确不可用时短暂切号
+- errorCode: 403
+  keywords:
+  - "Workspace access denied"
+  durationMinutes: 10
+  description: OpenCode Go 工作区权限明确拒绝时短暂切号
+- errorCode: 502
+  keywords:
+  - "Upstream response stream was interrupted"
+  - "Upstream response stream timed out"
+  - "openai.account_slot_acquire_failed"
+  - "Go usage limit exceeded"
+  - "Upstream request failed: [overloaded] the server is overloaded; retry shortly"
+  - "Workspace access denied"
+  durationMinutes: 3
+  description: OpenCode Go 上游流式响应中断或本地账号槽获取失败时短暂切号

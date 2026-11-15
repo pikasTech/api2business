@@ -5,6 +5,12 @@ platform: deepseek
 rules:
 - errorCode: 400
   keywords:
+  - insufficient credits
+  - insufficient_credits
+  durationMinutes: 10
+  description: DeepSeek 上游账号额度或信用不足时切号并冷却十分钟
+- errorCode: 400
+  keywords:
   - invalid_request_error
   - model not found
   - model_not_found

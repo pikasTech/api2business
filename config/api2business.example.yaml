@@ -581,6 +581,7 @@ operations:
       claude: config/failover-templates/claude.yaml
       grok: config/failover-templates/grok.yaml
       deepseek: config/failover-templates/deepseek.yaml
+      opencode: config/failover-templates/opencode.yaml
     externalCutoff:
       enabled: true
       dryRun: true

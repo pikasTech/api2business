@@ -34,7 +34,7 @@ function rulesForFailoverPlatform(
   platform: string,
 ): FailoverRule[] {
   const normalized = platform.toLowerCase();
-  if (normalized === "openai" || normalized === "anthropic" || normalized === "grok" || normalized === "deepseek") return rulesByPlatform[normalized];
+  if (normalized === "openai" || normalized === "anthropic" || normalized === "grok" || normalized === "deepseek" || normalized === "opencode_go") return rulesByPlatform[normalized];
   return [];
 }
 
@@ -1338,7 +1338,7 @@ export class UpstreamManagementService {
       const platform = String(query.rows.find((candidate) => Number(candidate.id) === accountId)?.platform ?? "").toLowerCase();
       const expectedRules = rulesForFailoverPlatform(expectedRulesByPlatform, platform);
       const rulesAligned = canonicalJson(rawRules) === canonicalJson(expectedRules);
-      const poolAligned = platform === "grok" || row.pool_mode === (platform === "anthropic");
+      const poolAligned = platform === "grok" || platform === "opencode_go" || row.pool_mode === (platform === "anthropic");
       if (poolAligned && row.temp_enabled === true && rulesAligned) verified.push(accountId);
       else misaligned.push({
         accountId,

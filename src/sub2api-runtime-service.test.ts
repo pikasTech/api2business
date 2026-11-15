@@ -577,6 +577,28 @@ test("applies the Grok template without writing pool mode", async () => {
   expect((calls[0]?.body.credentials as Record<string, unknown>).pool_mode).toBeUndefined();
 });
 
+test("applies the OpenCode Go template without writing pool mode", async () => {
+  const calls: Array<{ body: Record<string, unknown> }> = [];
+  const client = { mutate: async (_method: string, _path: string, body: Record<string, unknown>) => {
+    calls.push({ body });
+    return { success: 1, failed: 0, success_ids: [1595], failed_ids: [] };
+  } } as unknown as Sub2ApiClient;
+  const opencodeRules = [
+    { error_code: 403, keywords: ["Workspace access denied"], duration_minutes: 10 },
+    { error_code: 429, keywords: ["Go usage limit exceeded"], duration_minutes: 3 },
+  ];
+  const runtime = new Sub2ApiRuntimeService(client, [], { opencode_go: opencodeRules });
+  await runtime.applyApiKeyFailoverTemplates([1595], 120000, "opencode_go");
+  expect(calls[0]?.body).toEqual({
+    account_ids: [1595],
+    credentials: {
+      temp_unschedulable_enabled: true,
+      temp_unschedulable_rules: opencodeRules,
+    },
+  });
+  expect((calls[0]?.body.credentials as Record<string, unknown>).pool_mode).toBeUndefined();
+});
+
 test("applies the Claude template with pool mode and Anthropic rules", async () => {
   const calls: Array<{ path: string; body: Record<string, unknown> }> = [];
   const client = { mutate: async (_method: string, path: string, body: Record<string, unknown>) => {

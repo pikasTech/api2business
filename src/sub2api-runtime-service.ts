@@ -616,7 +616,7 @@ export class Sub2ApiRuntimeService {
       temp_unschedulable_enabled: true,
       temp_unschedulable_rules: this.failoverRulesForPlatform(platform),
     };
-    if (normalized !== "grok") credentials.pool_mode = normalized === "anthropic";
+    if (normalized !== "grok" && normalized !== "opencode_go") credentials.pool_mode = normalized === "anthropic";
     const result = await this.client.mutate<Record<string, unknown>>("POST", "/admin/accounts/bulk-update", {
       account_ids: ids,
       credentials,

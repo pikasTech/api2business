@@ -19,18 +19,21 @@ export interface UpstreamManagementConfig {
     claude: string;
     grok: string;
     deepseek: string;
+    opencode: string;
   };
   failoverTemplates: {
     codex: FailoverTemplate;
     claude: FailoverTemplate;
     grok: FailoverTemplate;
     deepseek: FailoverTemplate;
+    opencode: FailoverTemplate;
   };
   failoverRulesByPlatform: {
     openai: FailoverRule[];
     anthropic: FailoverRule[];
     grok: FailoverRule[];
     deepseek: FailoverRule[];
+    opencode_go: FailoverRule[];
   };
   primaryGroupId: number;
   groupIds: number[];
@@ -69,7 +72,7 @@ export interface UpstreamManagementConfig {
 
 export interface FailoverTemplate {
   name: string;
-  platform: "openai" | "anthropic" | "grok" | "deepseek";
+  platform: "openai" | "anthropic" | "grok" | "deepseek" | "opencode_go";
   rules: FailoverRule[];
 }
 
@@ -484,13 +487,13 @@ function strings(parent: ObjectValue, key: string, path: string): string[] {
   return value as string[];
 }
 
-function loadFailoverTemplate(rootDirectory: string, fileValue: string, templateKey: "codex" | "claude" | "grok" | "deepseek"): FailoverTemplate {
+function loadFailoverTemplate(rootDirectory: string, fileValue: string, templateKey: "codex" | "claude" | "grok" | "deepseek" | "opencode"): FailoverTemplate {
   const filePath = resolve(rootDirectory, fileValue);
   const path = `operations.upstreamManagement.templateFiles.${templateKey}`;
   const raw = object(parse(readFileSync(filePath, "utf8")), path);
   const name = stringValue(raw, "name", path);
   const platform = stringValue(raw, "platform", path);
-  const expectedPlatform = templateKey === "codex" ? "openai" : templateKey === "claude" ? "anthropic" : templateKey === "grok" ? "grok" : "deepseek";
+  const expectedPlatform = templateKey === "codex" ? "openai" : templateKey === "claude" ? "anthropic" : templateKey === "grok" ? "grok" : templateKey === "opencode" ? "opencode_go" : "deepseek";
   if (platform !== expectedPlatform) throw new Error(`${path}.platform must be ${expectedPlatform}`);
   const rulesValue = raw.rules;
   if (!Array.isArray(rulesValue) || rulesValue.length === 0) throw new Error(`${path}.rules must be a non-empty array`);
@@ -775,11 +778,13 @@ export function loadConfig(path: string): AppConfig {
   const claudeTemplatePath = stringValue(templateFiles, "claude", "operations.upstreamManagement.templateFiles");
   const grokTemplatePath = stringValue(templateFiles, "grok", "operations.upstreamManagement.templateFiles");
   const deepseekTemplatePath = stringValue(templateFiles, "deepseek", "operations.upstreamManagement.templateFiles");
+  const opencodeTemplatePath = stringValue(templateFiles, "opencode", "operations.upstreamManagement.templateFiles");
   const failoverTemplates = {
     codex: loadFailoverTemplate(rootDirectory, codexTemplatePath, "codex"),
     claude: loadFailoverTemplate(rootDirectory, claudeTemplatePath, "claude"),
     grok: loadFailoverTemplate(rootDirectory, grokTemplatePath, "grok"),
     deepseek: loadFailoverTemplate(rootDirectory, deepseekTemplatePath, "deepseek"),
+    opencode: loadFailoverTemplate(rootDirectory, opencodeTemplatePath, "opencode"),
   };
   const upstreamFailoverRules = failoverTemplates.codex.rules;
   const externalCutoff = object(upstreamManagement.externalCutoff, "operations.upstreamManagement.externalCutoff");
@@ -1158,13 +1163,14 @@ export function loadConfig(path: string): AppConfig {
       upstreamManagement: {
         pageSize: integerValue(upstreamManagement, "pageSize", "operations.upstreamManagement", 1, 100),
         defaultTemplate: stringValue(upstreamManagement, "defaultTemplate", "operations.upstreamManagement"),
-        templateFiles: { codex: codexTemplatePath, claude: claudeTemplatePath, grok: grokTemplatePath, deepseek: deepseekTemplatePath },
+        templateFiles: { codex: codexTemplatePath, claude: claudeTemplatePath, grok: grokTemplatePath, deepseek: deepseekTemplatePath, opencode: opencodeTemplatePath },
         failoverTemplates,
         failoverRulesByPlatform: {
           openai: failoverTemplates.codex.rules,
           anthropic: failoverTemplates.claude.rules,
           grok: failoverTemplates.grok.rules,
           deepseek: failoverTemplates.deepseek.rules,
+          opencode_go: failoverTemplates.opencode.rules,
         },
         primaryGroupId: upstreamPrimaryGroupId,
         groupIds: upstreamGroupIds,
@@ -1322,6 +1328,7 @@ export function startConfigHotReload(
       resolve(candidate.rootDirectory, candidate.operations.upstreamManagement.templateFiles.claude),
       resolve(candidate.rootDirectory, candidate.operations.upstreamManagement.templateFiles.grok),
       resolve(candidate.rootDirectory, candidate.operations.upstreamManagement.templateFiles.deepseek),
+      resolve(candidate.rootDirectory, candidate.operations.upstreamManagement.templateFiles.opencode),
     ]);
     return [...paths].sort().map((filePath) => {
       const stat = statSync(filePath);

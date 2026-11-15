@@ -446,10 +446,16 @@ test("keeps Codex and Claude templates as separate platform files", () => {
   expect(grok.rules.some((rule) => rule.error_code === 502 && rule.keywords.includes("Upstream service temporarily unavailable"))).toBe(true);
   expect(grok.rules.flatMap((rule) => rule.keywords).some((keyword) => /gpt-/u.test(keyword))).toBe(false);
   expect(grok.rules.flatMap((rule) => rule.keywords)).not.toContain("upstream access forbidden");
+  const opencode = parsed.operations.upstreamManagement.failoverTemplates.opencode;
+  expect(opencode.platform).toBe("opencode_go");
+  expect(opencode.rules).toHaveLength(5);
+  expect(opencode.rules.some((rule) => rule.error_code === 403 && rule.keywords.includes("Workspace access denied"))).toBe(true);
+  expect(opencode.rules.some((rule) => rule.error_code === 429 && rule.keywords.includes("Go usage limit exceeded"))).toBe(true);
   expect(parsed.operations.upstreamManagement.templateFiles).toEqual({
     codex: "config/failover-templates/codex.yaml",
     claude: "config/failover-templates/claude.yaml",
     grok: "config/failover-templates/grok.yaml",
     deepseek: "config/failover-templates/deepseek.yaml",
+    opencode: "config/failover-templates/opencode.yaml",
   });
 });
