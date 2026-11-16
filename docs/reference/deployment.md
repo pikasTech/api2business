@@ -3,12 +3,13 @@
 ## 标准入口
 
 - 所有新环境先克隆 Api2Business 仓库，不从压缩包、运行容器或其他项目复制部署文件。
+- 唯一源码与 PR 权威仓库是 `https://github.com/pikasTech/api2business`。
 - 克隆完成后进入仓库根目录，加载仓内 `skills/api2business/SKILL.md`。
 - 后续环境识别、配置准备、部署方式选择、执行、验证和回滚均由该 skill 指引。
 - 本 reference 只定义稳定部署合同，不替代 skill 的操作流程。
 
 ```bash
-git clone https://github.com/api2business/api2business.git
+git clone https://github.com/pikasTech/api2business.git
 cd api2business
 ```
 

@@ -28,7 +28,8 @@ description: >-
 
 ## 工作区
 
-- 新部署先克隆 `https://github.com/api2business/api2business.git`，再从克隆后的仓库加载本 skill。
+- 新部署先克隆 `https://github.com/pikasTech/api2business.git`，再从克隆后的仓库加载本 skill。
+- 该仓库是 Api2Business 的唯一源码、规格、技能和 PR 权威；其他仓库只交叉引用，不复制规则。
 - 从当前 Api2Business 仓库根目录执行命令。
   - 相对脚本路径离开仓库根目录时，Bun 报 `Module not found`。
   - 这表示脚本路径不存在，不表示命令未实现。
@@ -50,7 +51,7 @@ description: >-
 2. 克隆仓库并进入工作区：
 
    ```bash
-   git clone https://github.com/api2business/api2business.git
+   git clone https://github.com/pikasTech/api2business.git
    cd api2business
    ```
 

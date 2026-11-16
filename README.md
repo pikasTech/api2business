@@ -5,6 +5,10 @@ Api2Business 是面向 Sub2API 运行面的经营分析与调度控制台。它�
 上游、用户用量、采购成本、余额资产和请求质量放在同一套可审计的数据口径中，并通过
 YAML-first 配置、排队数据库读取和 Temporal 长流程完成日常运维。
 
+唯一源码、规格、技能和 PR 权威仓库是
+`https://github.com/pikasTech/api2business`。其他仓库和历史副本只交叉引用本仓库的
+稳定路径，不另行维护同义规则。
+
 ![OAuth 实时成本总览](docs/images/oauth-live-economics.png)
 
 ## 核心能力
@@ -143,6 +147,8 @@ bun run deploy:validate
 
 ## 权威文档
 
+- 仓库、源码、规格、技能和 PR：
+  [pikasTech/api2business](https://github.com/pikasTech/api2business)。
 - 上游、评分、探活、切号和作用域调度：
   [上游与调度](skills/api2business/references/upstream-scheduling.md)。
 - 余额、共享钱包别名、缓存刷新和失败保留：

@@ -1,5 +1,9 @@
 # Api2Business Agent 索引
 
+- 唯一源码、规格、技能和 PR 权威仓库：
+  `https://github.com/pikasTech/api2business`。
+  - 其他仓库、历史副本和运行容器只交叉引用本仓库的稳定路径。
+  - 不在其他仓库维护第二套算法、状态机、配置字段或验收规则。
 - 上游、评分、探活、切号和作用域调度的唯一详细权威：
   `skills/api2business/references/upstream-scheduling.md`。
 - 余额、共享钱包、额度缓存和失败保留的唯一详细权威：
