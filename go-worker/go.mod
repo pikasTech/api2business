@@ -1,4 +1,4 @@
-module github.com/api2business/api2business/go-worker
+module github.com/pikasTech/api2business/go-worker
 
 go 1.23.0
 

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/api2business/api2business/go-worker/internal/temporalworker"
+	"github.com/pikasTech/api2business/go-worker/internal/temporalworker"
 )
 
 func main() {
