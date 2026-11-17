@@ -1,8 +1,9 @@
 import { verifyObservationWindow } from "./observability-fixture";
 import { observabilityHelp, configureObservability, compactObservation, checkObservability } from "./observability";
 import { runWebScreenshot, webScreenshotHelp } from "./web-screenshot";
-import { historicalBalanceHelp, nativeHelp, operationHelp, priorityHistoryHelp } from "./operation-help";
+import { historicalBalanceHelp, nativeHelp, operationHelp, priorityHistoryHelp, upstreamsUsageHelp } from "./operation-help";
 import { measureQuotaMonitor } from './quota-monitor-measure';
+import { readSnapshotAwaitingBackgroundRefresh } from "./snapshot-read";
 import { randomUUID } from "node:crypto";
 import { AdminHttpClient } from "../../../../src/admin-http-client";
 import { existsSync, readFileSync } from "node:fs";
@@ -18,6 +19,7 @@ import { emitUserImpact } from "./user-impact-output";
 import { emitErrorAggregate } from "./error-aggregate-output";
 import { emitErrorDiagnosis, emitErrorInspection } from "./error-diagnose-output";
 import { emitCooldownDiagnosis } from "./error-diagnose-output";
+import { summarizeErrorCommitStage } from "./error-commit-stage";
 import { emitAccountEconomics, emitAccountImportEconomics } from "./account-economics-output";
 import { emitOAuthEconomics } from "./oauth-economics-output";
 import { emitDailyProfit } from "./daily-profit-output";
@@ -339,6 +341,7 @@ function help(): Record<string, unknown> {
       "errors diagnose [--start ISO --end ISO] [--request-id <request-id>] [--model <exact-id>] [--limit N] [--top N] [--account <id-or-name>] [--group <id-or-exact-name>]",
       "errors cooldowns [--since <ISO>] [--until <ISO>] [--limit N] [--account <id-or-name>] [--model <exact-id>]",
       "errors inspect --request-id <request-id>",
+      "errors commit-stage --request-id <request-id>",
       "errors list [--limit N]",
       "errors external-cutoff-match [--limit N]",
       "errors get --request-id <request-id>",
@@ -1362,7 +1365,14 @@ async function remote(parsed: Parsed, config: ReturnType<typeof loadConfig>, tar
   if (group === "backend" && action === "check") return await client.backendCheck();
   if (group === "upstream-scheduling-v2") {
     if (action === "scopes") return await client.upstreamSchedulingV2Scopes();
-    if (action === "snapshot") return await client.upstreamSchedulingV2Snapshot(parsed.scope, parsed.refresh && !parsed.cacheOnly);
+    if (action === "snapshot") {
+      if (parsed.refresh || parsed.cacheOnly) {
+        return await client.upstreamSchedulingV2Snapshot(parsed.scope, parsed.refresh && !parsed.cacheOnly);
+      }
+      return await readSnapshotAwaitingBackgroundRefresh({
+        read: () => client.upstreamSchedulingV2Snapshot(parsed.scope, false),
+      });
+    }
     if (action === "plan") return await client.upstreamSchedulingV2Plan(parsed.scope);
     if (action === "priority-run") {
       const scope = parsed.scope;
@@ -1466,6 +1476,18 @@ async function remote(parsed: Parsed, config: ReturnType<typeof loadConfig>, tar
       detail,
       valuesPrinted: false,
     };
+  }
+  if (group === "errors" && action === "commit-stage") {
+    if (!parsed.requestId) throw new Error("errors commit-stage requires --request-id");
+    const result = await client.sub2ApiRead<Record<string, unknown>>({
+      key: `errors:commit-stage:${parsed.requestId}`,
+      kind: "errors.commit-stage",
+      sql: "SELECT id, created_at, account_id, message, extra FROM ops_system_logs WHERE request_id = $1 ORDER BY created_at, id",
+      parameters: [parsed.requestId],
+      priority: "manual",
+      cacheMode: "bypass-cache",
+    });
+    return summarizeErrorCommitStage(parsed.requestId, result.rows);
   }
   if (group === "errors" && action === "list") {
     return await client.errorList(parsed.limit ?? config.monitor.errorAggregateLimit);
@@ -1634,6 +1656,7 @@ export async function runCli(args: string[]): Promise<void> {
       }, wantsJson);
     }
     if (args.includes("--help") && args.includes("native")) return emit(nativeHelp(args[args.indexOf("native") + 1]), wantsJson);
+    if (args.includes("--help") && args.some((item, index) => item === "upstreams" && args[index + 1] === "usage")) return emit(upstreamsUsageHelp(), wantsJson);
     if (args.includes("--help") && args.some((item, index) => item === "upstreams" && args[index + 1] === "usage-cache" && args[index + 2] === "restore")) return emit(historicalBalanceHelp(), wantsJson);
     if (args.includes("--help") && args.includes("web") && args[args.indexOf("web") + 1] === "screenshot") return emit(webScreenshotHelp(), wantsJson);
     if (args.includes("--help") && args.includes("gateway")) return emit({ ok: true,

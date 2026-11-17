@@ -59,6 +59,22 @@ export function historicalBalanceHelp(): Record<string, unknown> {
   };
 }
 
+export function upstreamsUsageHelp(): Record<string, unknown> {
+  return {
+    ok: true,
+    command: "upstreams usage",
+    usage: `${entry} --config <owning-YAML> upstreams usage [--accounts <id-or-range,...>] --over-api <absolute-http(s)-URL> [--json]`,
+    options: {
+      "--config": configOption,
+      "--accounts": "可选；正整数账号 ID、逗号列表或范围。省略时批量探测运行面既有账号，按供应商返回五小时/周/月额度",
+      "--over-api": overApiOption,
+      "--json": jsonOption,
+    },
+    behavior: "提交异步上游额度探测作业，回执 state=submitted 不是终态；再执行 workflow status --id <workflow-id> 读取终态。额度低或探测失败只作巡检与调度证据，不触发暂停或事故。",
+    verification: "用同一绝对 --over-api 追原 workflow，核对 succeeded/failed、quotaWindowCoverage、quotaProviderCoverage 与 lowQuotaWarnings；缺失窗口写 unknown，不填零。",
+  };
+}
+
 const idleProbeActions = ["plan", "history", "coverage", "reconcile", "run"] as const;
 
 export function idleProbeHelp(action?: string): Record<string, unknown> {
@@ -154,7 +170,7 @@ export function upstreamSchedulingV2Help(action?: string, subaction?: string): R
     usage,
     options,
     behavior: selected === "snapshot"
-      ? "默认读取缓存并由服务后台刷新；--refresh 同步等待重建；--cache-only 只读最近成功缓存。三者均为只读，不修改调度配置。"
+      ? "默认读取缓存；缓存陈旧时最多等待约 10 秒让服务后台重建完成后返回最新回执，重建失败或超时则原样返回陈旧回执；--refresh 同步等待重建；--cache-only 只读最近成功缓存。三者均为只读，不修改调度配置。"
       : selected === "priority-run"
         ? "默认只读预览；--confirm 通过原生 worker 执行一次指定作用域的优先级调整，不直接连接业务库。"
         : selected === "model-sync"

@@ -98,6 +98,8 @@ FROM user_totals t
 JOIN users u ON u.id = t.user_id
 WHERE u.deleted_at IS NULL
   AND LOWER(COALESCE(u.role, '')) <> 'admin'
+  AND u.email <> 'monitor-user@sub2api.platform-infra.local'
+  AND u.email NOT LIKE 'api2business-probe-%@sub2api.platform-infra.local'
 ORDER BY
   t.customer_visible_infrastructure_failures DESC,
   t.success_requests DESC,

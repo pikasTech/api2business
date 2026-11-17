@@ -149,14 +149,14 @@ async function body(request: Request): Promise<Record<string, unknown>> {
   return await request.json().catch(() => ({})) as Record<string, unknown>;
 }
 
-function errorResponse(error: unknown, request?: Request): Response {
+export function errorResponse(error: unknown, request?: Request): Response {
   const message = error instanceof Error ? error.message : String(error);
   if (error instanceof UpstreamManagementError) {
     return json({ ok: false, error: message, ...error.details }, error.status);
   }
   const status = isRecoverableDatabaseConnectionError(error)
     ? 503
-    : /does not exist|no draw chance|no eligible|selector resolved no recent errors/u.test(message)
+    : /does not exist|no draw chance|no eligible|selector resolved no recent errors|account selector did not resolve exactly once|group selector resolved no scoreable accounts/u.test(message)
     ? 409
     : /base_url|API key|后缀|费率|充值金额|幂等键|字段不能为空|当前账号缺少|JSON|ZIP|去重后的账号数量|账号数量/u.test(message)
     ? 400
