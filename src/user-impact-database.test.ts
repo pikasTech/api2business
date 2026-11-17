@@ -21,4 +21,6 @@ test("uses one bounded database aggregation and excludes recovered requests", ()
   expect(userImpactQuery).toContain("NOT IN ('client', 'business')");
   expect(userImpactQuery).toContain("COALESCE(is_business_limited, false) IS FALSE");
   expect(userImpactQuery).toContain("LOWER(COALESCE(u.role, '')) <> 'admin'");
+  expect(userImpactQuery).toContain("u.email <> 'monitor-user@sub2api.platform-infra.local'");
+  expect(userImpactQuery).toContain("u.email NOT LIKE 'api2business-probe-%@sub2api.platform-infra.local'");
 });

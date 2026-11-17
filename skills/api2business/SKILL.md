@@ -200,8 +200,10 @@ bun skills/api2business/scripts/api2business-cli.ts --config config/api2business
   唯一判定与处置规则见
   [自动巡检低分归因与处置](references/upstream-scheduling.md#自动巡检低分归因与处置)。
 - V2 使用 `upstream-scheduling-v2 scopes|plan --over-api <absolute-http(s)-URL>` 或
-  `upstream-scheduling-v2 snapshot --scope <scope> --over-api <absolute-http(s)-URL>` 只读查看；新鲜度告警或刷新失败
-  排查默认读取缓存并由服务后台刷新；需要同步刷新时追加 `--refresh`，只读取最近成功的读模型缓存时追加 `--cache-only`，两者不可同时使用。使用
+  `upstream-scheduling-v2 snapshot --scope <scope> --over-api <absolute-http(s)-URL>` 只读查看；默认读取缓存，
+  陈旧时最多等待约 10 秒让服务后台重建完成并返回最新回执，重建失败或超时则原样返回陈旧回执；需要同步重建时追加
+  `--refresh`，只读取最近成功的读模型缓存时追加 `--cache-only`，两者不可同时使用。`cache.state=stale` 且
+  `cache.complete=true` 只表示读模型仍在刷新，不等于数据缺失或刷新失败；用同一入口重读/等待即可，不要据此误报故障。使用
   `upstream-scheduling-v2 priority-run --scope <codex|claude|grok|deepseek> --confirm --over-api <absolute-http(s)-URL>`
   通过原生 worker 执行一次指定作用域的手动优先级调整；作用域的
   `scoreRead`、`planRead`、`planWrite`、`priorityAutomation`、`idleProbe` 和
@@ -226,6 +228,8 @@ bun skills/api2business/scripts/api2business-cli.ts --config config/api2business
 - 充值请求超时重试时必须复用相同的 `--idempotency-key`，禁止生成新 key 重复提交同一笔充值。
 - CLI 在提交传输异常时会回显本次幂等键和“结果未知”提示；只有复用该键重试，不能把传输异常当成未提交而生成新键。
 - 精确错误链使用 `errors diagnose --request-id <request-id> --over-api <absolute-http(s)-URL>`。
+  - `errors diagnose` 的链条在顶层 `chains`，`errors inspect` 在 `diagnosis.chains`；脚本解析前先按命令选对层级。
+- 判断 502/503 是否发生在响应写出后，使用 `errors commit-stage --request-id <request-id> --over-api <absolute-http(s)-URL>`；只投影系统日志中的提交阶段标记，不读取完整日志正文。
 - 按模型定位使用 `errors diagnose --model <exact-model-id> --limit <N> --top <N> --over-api <absolute-http(s)-URL>`。
 - 单请求排障使用 `errors inspect --request-id <request-id> --over-api <absolute-http(s)-URL>`。
 - 切号是否命中、候选是否耗尽、正文是否缺失，只以 `references/upstream-scheduling.md` 为准。
@@ -291,6 +295,7 @@ bun skills/api2business/scripts/api2business-cli.ts --config config/api2business
   - `--group` 按错误记录的实际请求分组筛选；
   - 默认排除内部 monitor 用户和 `api2business-probe-*` 探活流量；
   - 返回 `groupFilterBasis=request-group` 与 `probeNoiseExcluded=true` 供调用方核对口径。
+  - `errors list` 只有 `--limit`，没有时间窗口参数，且小 limit 会被 `api2business-probe-*` 探活记录占满；窗口统计用 `errors aggregate|diagnose --start --end`，需要原始行时用 `errors list --limit 3000` 再按 `createdAt`（北京时间）本地过滤。
 - 页面普通读取、V2 读模型缓存、额度缓存和刷新终态分别见
   [上游与调度](references/upstream-scheduling.md) 与
   [额度监控](references/quota-monitoring.md)；本技能不复制第二套缓存状态机。
@@ -402,6 +407,7 @@ bun skills/api2business/scripts/api2business-cli.ts \
   [运维观测规格](../../docs/specs/operational-observability.md#余额存在但消耗停滞)。
 - QQ 渠道的新上游发现、零余额上游复活建议和官方核验见
   [上游与调度](references/upstream-scheduling.md#qq-渠道上游发现与零余额复活建议)。
+- `accounts idle-probe coverage` 默认窗口为 20 分钟；两小时巡检必须显式传 `--window-minutes 120`，否则手动补跑刚完成的账号会被误判为覆盖缺口。
 - 两小时报告固定包含“OpenCode Go 与 CommandCode 三窗口额度”一节，按平台聚合。
   - 用 `upstreams usage` 或 `upstreams usage-cache` 一次批量取账号、分组、五小时/周/月剩余百分比与重置时间。
   - 只报可调度账号的合计供给和最早重置；不可调度账号单列原因，不并入可承流额度。

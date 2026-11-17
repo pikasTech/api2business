@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { assertErrorsQueryBounds, assertObservationWindow, assertSchedulingRuntimeQuery, normalizeCliArgs, parseArgs, poolQualityScope, priorityHistoryDiagnostics, selectPriorityHistory, summarizeWorkflowStatus } from "./cli";
-import { operationHelp } from "./operation-help";
+import { operationHelp, upstreamsUsageHelp } from "./operation-help";
 import { webProbeElementArgs } from "./web-screenshot";
 
 test("historical balance CLI accepts signed USD without consuming the next option", () => {
@@ -82,6 +82,12 @@ test("operation help returns action-specific contracts without loading config", 
   expect(rank).toMatchObject({ ok: true, command: "scores rank" });
   expect(String(rank?.verification)).toContain("refreshedAt");
   expect(operationHelp(["scores", "get", "--help"])).toBeNull();
+
+  const usage = upstreamsUsageHelp();
+  expect(usage).toMatchObject({ ok: true, command: "upstreams usage" });
+  expect(String(usage.usage)).toContain("--accounts");
+  expect(String(usage.verification)).toContain("quotaWindowCoverage");
+  expect(JSON.stringify(usage)).toContain("workflow status");
 });
 
 test("priority history scope keeps matching rounds and discloses omissions", () => {
