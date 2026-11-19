@@ -72,6 +72,28 @@ test("idle probe prefers gpt-6.1-sol, then Terra, from the account model whiteli
   expect(selectIdleProbeModel([], "gpt-5.6-terra")).toBe("gpt-5.6-terra");
 });
 
+test("idle probe prefers the newest Gemini alias present in the account mapping", () => {
+  const preferred = [
+    "gemini-4-hydrogen", "gemini-4-argon", "gemini-3.8-flash",
+    "gemini-3.1-pro-preview", "gemini-3-pro-preview", "gemini-2.5-pro", "gemini-2.5-flash",
+  ];
+  expect(selectIdleProbeModel(
+    ["gemini-3.8-flash", "gemini-4-argon", "gemini-4-hydrogen"],
+    "gemini-2.5-pro",
+    preferred,
+  )).toBe("gemini-4-hydrogen");
+  expect(selectIdleProbeModel(
+    ["gemini-2.5-pro", "gemini-3.1-pro-preview", "gemini-4-argon"],
+    "gemini-2.5-pro",
+    preferred,
+  )).toBe("gemini-4-argon");
+  expect(selectIdleProbeModel(
+    ["gemini-2.5-pro", "gemini-3.1-pro-preview"],
+    "gemini-2.5-pro",
+    preferred,
+  )).toBe("gemini-3.1-pro-preview");
+});
+
 test("idle probe reconciliation repairs a persisted private group removed by a bulk account update", async () => {
   const ensured: number[] = [];
   const isolation = {

@@ -353,9 +353,12 @@
     `ordinaryLogRecorded` 和探活轮次记录；手动成功后才打开该作用域的 `idleProbe`。
   - 探活候选必须按作用域平台和分组查询，模型白名单动态选择
     `sub2api.idleProbe.platformModels` 中的候选；Codex 默认按 `gpt-6.1-sol`、
-    以 owning YAML 的 `platformModels.openai` 顺序为准，首选 `gpt-6.1-sol`；Grok 使用自己的模型目录。账号没有首选模型时，
-    按账号真实 `model_mapping` 的原有顺序选择第一个可用模型；只有没有任何映射时才回退
-    到作用域默认模型。不能因为首选模型不匹配就跳过账号，也不能临时写入映射。探活失败、
+    以 owning YAML 的 `platformModels.openai` 顺序为准，首选 `gpt-6.1-sol`；Grok 使用自己的模型目录。
+    白名单必须按新到旧排列；Gemini 当前按 `gemini-4-hydrogen`、`gemini-4-argon`、
+    `gemini-3.8-flash`、`gemini-3.1-pro-preview` 的优先顺序探活，不能把 `gemini-2.5-*`
+    放在前面。账号存在 `model_mapping` 时，按白名单顺序选择第一个映射命中，不能按 jsonb
+    键的原始顺序取第一个；只有没有任何映射时才回退到该平台白名单的首个模型。不能因为首选
+    模型不匹配就跳过账号，也不能临时写入映射。探活失败、
     未就绪和普通记录缺失分别保留，不把工作流 `running` 当作业务成功。探针私有分组的
     平台、基础业务分组和候选账号必须来自同一作用域，Grok 不得绑定 Codex 分组。
   - 作用域探活的 plan/history 是实时读入口，必须绕过通用 API 响应缓存；缓存未刷新不能

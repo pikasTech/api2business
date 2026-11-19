@@ -72,7 +72,7 @@ test("upstream creation bootstrap rate is YAML-owned", () => {
 });
 
 test("quota monitor excludes wallets from owning YAML", () => {
-  const config = loadConfig("config/api2business.yaml");
+  const config = loadConfig("config/api2business.example.yaml");
   expect(config.operations.upstreamManagement.quotaMonitor.excludedWalletKeys).toContain("https://sub.api2business.com");
 });
 
