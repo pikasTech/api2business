@@ -59,7 +59,7 @@ describe("upstream scheduling v2 platform validation", () => {
     expect(config.operations.upstreamManagement.failoverTemplates.gemini.platform).toBe("gemini");
     expect(config.sub2api.geminiPriorityPlan?.platform).toBe("gemini");
     expect(config.sub2api.idleProbe.platformModels?.gemini?.slice(0, 3)).toEqual([
-      "gemini-4-hydrogen", "gemini-4-argon", "gemini-3.8-flash",
+      "gemini-4-argon", "gemini-4-hydrogen", "gemini-3.8-flash",
     ]);
     expect(config.operations.upstreamSchedulingV2?.scopes.gemini.features).toMatchObject({
       idleProbe: true,

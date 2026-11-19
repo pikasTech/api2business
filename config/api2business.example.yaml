@@ -230,8 +230,8 @@ sub2api:
       anthropic: [ claude-sonnet-5-5 ]
       grok: [ grok-4.5 ]
       deepseek: [ deepseek-flash ]
-      # 按新到旧排列；映射存在时取第一个命中，映射为空时才回退首个候选。
-      gemini: [ gemini-4-hydrogen, gemini-4-argon, gemini-3.8-flash, gemini-3.1-pro-preview, gemini-3-pro-preview, gemini-2.5-pro, gemini-2.5-flash ]
+      # 按新到旧排列；映射存在时按此顺序命中，映射为空或全不命中时回退首项。
+      gemini: [ gemini-4-argon, gemini-4-hydrogen, gemini-3.8-flash, gemini-3.1-pro-preview, gemini-3-pro-preview, gemini-2.5-pro, gemini-2.5-flash ]
     reasoningEffort: low
     candidateLimit: 10
     concurrency: 1000

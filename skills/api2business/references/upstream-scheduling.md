@@ -86,7 +86,8 @@
   - 禁止用 `PUT /admin/accounts/:id` 提交不完整 credentials。该路径只对敏感键做保留，
     会删除未随请求提交的非敏感字段，曾导致自定义上游 `base_url` 回退到平台默认地址；
   - 每个账号先完成读取，再独立执行一次 bulk merge；空模型、读取失败或写入失败立即停止该账号，
-    不清空旧映射，也不扩展到其他账号；
+    不清空旧映射；多账号 `upstreams models sync` 继续处理其余账号，并在 `failures` 中保留
+    脱敏后的账号级错误，不能因一个账号失败而静默跳过同批其他账号；
   - 完成后用单账号原生读取核对 `base_url`、key 存在状态、平台和映射；不得用整组截图代替回读。
 - V2 模型同步按作用域独立运行：
   - 只读计划、手动执行和历史分别使用
@@ -255,6 +256,13 @@
     - `502` 的过载、容量、限流、余额故障以及未开始输出前的流断开统一使用不超过 3 分钟的短冷却；
       Claude 的 `upstream access forbidden` 明确表示上游权限或账号状态拒绝，使用 10 分钟冷却，
       不与普通瞬态 `502` 混用。
+    - Gemini 已观测并确认的正文短语只用于对应状态码：
+      - `404 Model <model> is not available` 使用 3 分钟冷却；
+      - `429 RESOURCE_EXHAUSTED` 和 `Too many requests. Please retry later.` 使用 3 分钟冷却；
+      - `502 error code: 502` 使用 3 分钟冷却；
+      - `503 No available Gemini accounts: no available accounts` 使用 3 分钟冷却；
+      - 这些短语不得跨状态码复用，也不得用系统日志事件 `gateway.failover_switch_account`
+        代替上游响应正文。
     - 具体切号效果以 Sub2API 当前原生匹配语义和真实回读为准。
   - 切号处理决策：
     - 先用 `errors diagnose` 读取精确请求链，需要详情时再用 `errors inspect`。
@@ -354,11 +362,15 @@
   - 探活候选必须按作用域平台和分组查询，模型白名单动态选择
     `sub2api.idleProbe.platformModels` 中的候选；Codex 默认按 `gpt-6.1-sol`、
     以 owning YAML 的 `platformModels.openai` 顺序为准，首选 `gpt-6.1-sol`；Grok 使用自己的模型目录。
-    白名单必须按新到旧排列；Gemini 当前按 `gemini-4-hydrogen`、`gemini-4-argon`、
+    白名单必须按新到旧排列；Gemini 当前按 `gemini-4-argon`、`gemini-4-hydrogen`、
     `gemini-3.8-flash`、`gemini-3.1-pro-preview` 的优先顺序探活，不能把 `gemini-2.5-*`
     放在前面。账号存在 `model_mapping` 时，按白名单顺序选择第一个映射命中，不能按 jsonb
-    键的原始顺序取第一个；只有没有任何映射时才回退到该平台白名单的首个模型。不能因为首选
-    模型不匹配就跳过账号，也不能临时写入映射。探活失败、
+    键的原始顺序取第一个；没有任何映射，或映射存在但白名单全部不命中时，回退到该平台
+    白名单的首个模型。不能因为首选模型不匹配就跳过账号，也不能临时写入映射。
+    同一账号按白名单顺序保存有限个已映射候选；只有首选模型返回 `400`/`404` 或
+    HTTP 200 空答案时，才尝试下一个候选。`429`、认证失败、超时、路由失败和 `5xx`
+    不消耗后续候选；结果必须保留 `modelAttempts`，不能用最后一次尝试覆盖前面的错误。
+    探活失败、
     未就绪和普通记录缺失分别保留，不把工作流 `running` 当作业务成功。探针私有分组的
     平台、基础业务分组和候选账号必须来自同一作用域，Grok 不得绑定 Codex 分组。
   - 作用域探活的 plan/history 是实时读入口，必须绕过通用 API 响应缓存；缓存未刷新不能

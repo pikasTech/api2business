@@ -614,6 +614,7 @@ export class UpstreamManagementService {
       accountIds,
       this.config.operations.upstreamManagement.mutationTimeoutMs,
       this.config.operations.upstreamSchedulingV2?.modelSyncPolicy,
+      { continueOnError: accountIds.length > 1 },
     );
   }
 
