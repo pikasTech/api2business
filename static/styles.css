@@ -1110,3 +1110,130 @@ body[data-page="upstream-scheduling-v2"] .unified-upstream-table .group-list spa
   body[data-page="upstream-scheduling-v2"] .unified-upstream-table td:first-child,
   body[data-page="upstream-scheduling-v2"] .unified-upstream-table th:first-child { width: 210px; }
 }
+
+/* Layout harmony pass: keep page identity, scope, controls and primary evidence aligned at every width. */
+body[data-page="upstream-scheduling-v2"] .upstream-slim-head {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 382px);
+  grid-template-areas: "title title" "quality actions";
+  align-items: stretch;
+  gap: 16px 20px;
+  padding-bottom: 22px;
+}
+body[data-page="upstream-scheduling-v2"] .score-page-title {
+  grid-area: title;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+body[data-page="upstream-scheduling-v2"] .score-page-title > div:first-child { flex: 1 1 auto; min-width: 0; }
+body[data-page="upstream-scheduling-v2"] .score-page-title h1 { font-size: clamp(26px, 2vw, 30px); line-height: 1.08; white-space: nowrap; }
+body[data-page="upstream-scheduling-v2"] .score-page-title .live-head-sample { max-width: 78ch; margin-top: 6px; }
+body[data-page="upstream-scheduling-v2"] .score-profile-switch { flex: 0 1 auto; max-width: min(100%, 720px); margin: 0; align-self: center; }
+body[data-page="upstream-scheduling-v2"] .score-profile-switch .profile-tab { min-width: 86px; height: 34px; padding-inline: 14px; }
+body[data-page="upstream-scheduling-v2"] .pool-quality-head {
+  grid-area: quality;
+  width: 100%;
+  min-width: 0;
+  align-self: stretch;
+  grid-template-columns: minmax(220px, 1fr) minmax(104px, 116px) minmax(330px, 1.25fr);
+}
+body[data-page="upstream-scheduling-v2"] .pool-quality-head > * { padding: 14px 16px; }
+body[data-page="upstream-scheduling-v2"] .pool-quality-copy h2 { font-size: 19px; }
+body[data-page="upstream-scheduling-v2"] .pool-quality-metrics div { display: flex; flex-direction: column; justify-content: center; }
+body[data-page="upstream-scheduling-v2"] .pool-quality-metrics dd { font-size: clamp(15px, 1.1vw, 18px); white-space: nowrap; }
+body[data-page="upstream-scheduling-v2"] .score-head-actions {
+  grid-area: actions;
+  width: 100%;
+  flex: none;
+  align-self: stretch;
+  align-content: stretch;
+  align-items: stretch;
+  grid-template-columns: minmax(0, 1fr) auto auto 36px;
+}
+body[data-page="upstream-scheduling-v2"] .score-head-clock { padding: 12px 14px; }
+body[data-page="upstream-scheduling-v2"] .score-head-clock strong { font-size: clamp(18px, 1.4vw, 22px); font-variant-numeric: tabular-nums; }
+body[data-page="upstream-scheduling-v2"] .score-auto-refresh { white-space: nowrap; }
+body[data-page="upstream-scheduling-v2"] .score-auto-refresh > span { flex: 0 0 auto; white-space: nowrap; }
+body[data-page="upstream-scheduling-v2"] .score-head-actions .score-auto-refresh select { height: 36px; }
+body[data-page="upstream-scheduling-v2"] .score-head-actions .state-badge,
+body[data-page="upstream-scheduling-v2"] .score-head-actions .icon-command { min-height: 36px; }
+
+@media (max-width: 1279px) {
+  body[data-page="upstream-scheduling-v2"] .upstream-slim-head {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "title" "quality" "actions";
+  }
+  body[data-page="upstream-scheduling-v2"] .pool-quality-head {
+    min-width: 0;
+    overflow: hidden;
+    grid-template-columns: minmax(200px, 1fr) 116px minmax(320px, 1.35fr);
+  }
+}
+
+@media (max-width: 900px) {
+  .primary-nav { mask-image: linear-gradient(90deg, #000 0, #000 calc(100% - 28px), transparent 100%); }
+  .page-head:not(.upstream-slim-head) { align-items: stretch; flex-direction: column; gap: 16px; padding-bottom: 16px; }
+  .page-head:not(.upstream-slim-head) .page-actions,
+  .page-head:not(.upstream-slim-head) .ranking-controls { width: 100%; justify-content: flex-start; flex-wrap: wrap; }
+  .topbar nav a { font-size: 12px; }
+  body[data-page="upstream-scheduling-v2"] .upstream-slim-head { gap: 14px; padding-bottom: 18px; }
+  body[data-page="upstream-scheduling-v2"] .score-page-title { align-items: stretch; flex-direction: column; gap: 12px; }
+  body[data-page="upstream-scheduling-v2"] .score-profile-switch { width: 100%; max-width: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); overflow: hidden; }
+  body[data-page="upstream-scheduling-v2"] .score-profile-switch .profile-tab { width: 100%; min-width: 0; height: 36px; padding: 6px 4px; white-space: normal; line-height: 1.15; }
+  body[data-page="upstream-scheduling-v2"] .pool-quality-head { grid-template-columns: minmax(0, 1fr) 112px; }
+  body[data-page="upstream-scheduling-v2"] .pool-quality-metrics { grid-column: 1 / -1; padding: 0; }
+  body[data-page="upstream-scheduling-v2"] .score-head-actions {
+    grid-template-columns: minmax(0, 1fr) auto 36px;
+    align-content: stretch;
+  }
+  body[data-page="upstream-scheduling-v2"] .score-head-actions .score-auto-refresh { grid-column: 1 / -1; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px; }
+  body[data-page="upstream-scheduling-v2"] .score-head-actions .oauth-refresh-countdown { grid-column: 1; text-align: left; }
+  body[data-page="upstream-scheduling-v2"] .score-head-actions .state-badge { grid-column: 2; }
+  body[data-page="upstream-scheduling-v2"] .score-head-actions .icon-command { grid-column: 3; }
+  .probe-cache-overview { margin-top: 18px; padding: 16px; }
+  .probe-cache-overview-head { gap: 10px; }
+  .probe-cache-overview-head .query-command { width: 100%; }
+  .probe-cache-cards { gap: 10px; }
+}
+
+@media (max-width: 700px) {
+  body[data-page="upstream-scheduling-v2"] .score-table-toolbar .score-query-controls,
+  body[data-page="upstream-scheduling-v2"] .automation-section .score-query-controls {
+    width: 100%;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  body[data-page="upstream-scheduling-v2"] .score-table-toolbar .filter-field,
+  body[data-page="upstream-scheduling-v2"] .score-table-toolbar .select-field,
+  body[data-page="upstream-scheduling-v2"] .automation-section .filter-field,
+  body[data-page="upstream-scheduling-v2"] .automation-section .select-field { width: 100%; }
+  body[data-page="upstream-scheduling-v2"] .score-table-toolbar .filter-field input,
+  body[data-page="upstream-scheduling-v2"] .score-table-toolbar .select-field select,
+  body[data-page="upstream-scheduling-v2"] .automation-section .filter-field input,
+  body[data-page="upstream-scheduling-v2"] .automation-section .select-field select { width: 100%; min-width: 0; flex: 1; }
+  .quota-monitor { margin-bottom: 20px; }
+  .quota-monitor-values > div { min-height: 84px; padding: 13px 12px; }
+  .quota-charts figure { padding: 12px; }
+}
+
+@media (max-width: 560px) {
+  .brand small { display: none; }
+  .brand b { font-size: 14px; }
+  .primary-nav { margin-top: 8px; }
+  .page-head h1 { font-size: 23px; line-height: 1.15; }
+  .page-actions .query-command,
+  .score-head-actions .state-badge,
+  .score-head-actions .icon-command,
+  .score-auto-refresh select,
+  .select-field select,
+  .filter-field input { min-height: 40px; }
+  body[data-page="upstream-scheduling-v2"] .pool-quality-head { grid-template-columns: minmax(0, 1fr) 104px; }
+  body[data-page="upstream-scheduling-v2"] .pool-quality-head > * { padding: 12px; }
+  body[data-page="upstream-scheduling-v2"] .probe-cache-card { padding: 16px; gap: 8px; }
+  body[data-page="upstream-scheduling-v2"] .probe-cache-card > strong { font-size: clamp(30px, 8vw, 36px); }
+  body[data-page="upstream-scheduling-v2"] .score-auto-refresh select { width: 100%; }
+}
