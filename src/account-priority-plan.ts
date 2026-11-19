@@ -373,7 +373,9 @@ function buildPriorityProfile(
   const zeroSampleReferencePriorities = availableScopedRows
     .filter((row) => row.currentAvailable === true)
     .map((row) => number(row.priority))
-    .filter((priority): priority is number => priority !== null && priority !== policy.maximumPriority);
+    .filter((priority): priority is number => priority !== null
+      && priority >= policy.minimumPriority
+      && priority < policy.maximumPriority);
   const zeroSampleWarmStart = zeroSampleRows.length === 0
     ? null
     : zeroSampleReferencePriorities.length === 0

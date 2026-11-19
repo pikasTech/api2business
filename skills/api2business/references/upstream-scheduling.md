@@ -568,8 +568,9 @@
   `observedAttempts=0` 的账号。
 - 仅当作用域 `explorationWeight=0` 时启用暖启动：
   - 账号必须 `currentAvailable=true`，并排除 `fixedPriorities`。
-  - 暖启动优先级取本轮同作用域、当前可用、非固定、且当前 priority 不等于
-    `maximumPriority` 的账号优先级算术平均，再四舍五入。
+  - 暖启动优先级取本轮同作用域、当前可用、非固定、且当前 priority 严格落在
+    `[minimumPriority, maximumPriority)` 内的账号优先级算术平均，再四舍五入。
+  - 低于 `minimumPriority` 的越界运行值不是有效参考，不得混入平均；这包括新账号历史默认值。
   - 平均值必须排除 `maximumPriority`；不得把已经处于最低档的账号计入分母。
   - 排除最低档后没有可平均账号时，固定使用 `150`。
   - 暖启动不得因四舍五入落到 `maximumPriority`；结果限制在配置优先级范围内且低于该值。
