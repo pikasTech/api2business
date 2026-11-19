@@ -284,7 +284,11 @@ test("idle probe skips a concurrent round and uses the full per-account timeout"
   }]), runtime as never, isolation as never);
   const first = service.run([369], 1);
   await started;
-  expect(await service.run([369], 1)).toMatchObject({ skipped: true, reason: "in-flight" });
+  const skipped = await service.run([369], 1);
+  expect(skipped).toMatchObject({ skipped: true, reason: "in-flight" });
+  expect(typeof skipped.runningSince).toBe("string");
+  expect(typeof skipped.runningForMs).toBe("number");
+  expect(Number(skipped.runningForMs)).toBeGreaterThanOrEqual(0);
   release();
   expect(observedTimeoutMs).toBe(120000);
   expect(await first).toMatchObject({

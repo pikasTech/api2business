@@ -5,6 +5,11 @@
 - HTTP 业务入口必须显式提供 owning YAML 声明的绝对运行面 URL。
   - 无值、布尔值、别名、未知 URL 和隐式环境定位必须失败。
   - 续查回执保留该运行面；CLI 参数以技能为唯一权威。
+- HTTP 写请求的正文只接受 JSON 对象；空正文仍按空对象处理。
+  - 非法 JSON 或数组/标量正文必须返回 `400` 并保留解析原因，不能静默折成 `{}` 后让
+    下游误报“缺少字段”。
+  - 错误正文与状态码合同只由 `src/http.ts` 的 `parseJsonObjectBody` 和
+    `errorResponse` 维护。
 - owning YAML 是运维事实来源。V2 的作用域、功能开关、周期、模型白名单和模板文件由
   YAML 定义，代码只负责校验、渲染和执行。
 - V2 是当前上游调度运行面；Codex、Claude、Grok、DeepSeek、OpenCode 和 Gemini 使用同一作用域接口，旧全局调度配置

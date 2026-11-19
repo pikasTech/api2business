@@ -124,6 +124,8 @@ bun skills/api2business/scripts/api2business-cli.ts --config config/api2business
 ```
 
 - `native` 是唯一 L1 实例的生命周期入口，实际运行方式由配置选择；生命周期操作不得创建第二个业务实例。
+- reviewed PR 合入后，从干净提交树构建再 `--no-build` 替换 L1 的顺序见
+  [部署参考](../../docs/reference/deployment.md#已提交树重建并替换-l1)。
 - API 应快速返回作业 ID，长流程由 worker 执行。
 - 数据库读取使用应用内排队读取通道，不从外部脚本直接连接业务数据库。
 

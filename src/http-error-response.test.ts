@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { errorResponse } from "./http";
+import { errorResponse, parseJsonObjectBody } from "./http";
 
 async function errorStatus(error: Error): Promise<{ status: number; body: { ok: boolean; error: string } }> {
   const response = errorResponse(error);
@@ -20,5 +20,19 @@ describe("management selector errors", () => {
     const result = await errorStatus(new Error("group selector resolved no scoreable accounts: empty"));
     expect(result.status).toBe(409);
     expect(result.body).toEqual({ ok: false, error: "group selector resolved no scoreable accounts: empty" });
+  });
+});
+
+describe("request body parsing", () => {
+  test("empty body stays an empty object for query-only endpoints", () => {
+    expect(parseJsonObjectBody("   ")).toEqual({});
+  });
+
+  test("malformed JSON reports the parse cause instead of an empty object", () => {
+    expect(() => parseJsonObjectBody('{"ok":')).toThrow(/^请求正文不是合法 JSON: /);
+  });
+
+  test("non-object JSON is rejected with an actionable message", () => {
+    expect(() => parseJsonObjectBody("[1,2]")).toThrow("请求正文必须是 JSON 对象");
   });
 });

@@ -61,6 +61,28 @@ docker compose ps
   - 公开业务只经 `api2business.hwpod.com` 的 Caddy/TLS 入口，上游端口必须做旁路核验。
   - HTTPS 生产目标的 `secureCookies` 必须为 `true`；本地 native HTTP 调试可单独关闭。
 
+## 已提交树重建并替换 L1
+
+- 固定主工作区只保留 `master`，不直接提交；改动走 reviewed PR，合入后主工作区快进。
+- 主工作区存在并行脏改时，不把工作区当构建上下文；按以下顺序发布：
+
+```bash
+# 1. 在短生命周期 worktree 检出已合入提交，并从干净树构建同名镜像
+git worktree add <repo>/.worktree/<slug> -b <fix-branch> origin/master
+git -C <repo>/.worktree/<slug> checkout --detach origin/master
+docker compose --project-name api2business-l1 --file compose.yaml \
+  --env-file .state/compose/api2business.env build api worker
+
+# 2. 回到主工作区，用同一项目名和同一 compose 文件替换服务，不重新构建
+docker compose --project-name api2business-l1 --file compose.yaml \
+  --env-file .state/compose/api2business.env up -d --no-build api worker
+```
+
+- 替换后必须 `native status --component all`、健康端点和 `deploy:verify` 三项同时通过。
+- 不要用 `native start` 在脏工作区重建；它会把未提交改动带进镜像。
+- 不要为发布新建第二个 compose 项目或改端口；镜像名、项目名和挂载必须指向唯一 L1。
+- 构建 worktree 结束后按[有界删除](devops-hygiene.md)清理，不删除主工作区改动。
+
 ## Kubernetes
 
 - 将模板占位符替换为镜像摘要、源码提交、配置摘要和 Base64 配置正文。

@@ -145,8 +145,22 @@ function redirect(location: string): Response {
   return new Response(null, { status: 302, headers: { location, "cache-control": "no-store" } });
 }
 
+export function parseJsonObjectBody(text: string): Record<string, unknown> {
+  if (!text.trim()) return {};
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch (error) {
+    throw new Error(`请求正文不是合法 JSON: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new Error("请求正文必须是 JSON 对象");
+  }
+  return parsed as Record<string, unknown>;
+}
+
 async function body(request: Request): Promise<Record<string, unknown>> {
-  return await request.json().catch(() => ({})) as Record<string, unknown>;
+  return parseJsonObjectBody(await request.text());
 }
 
 export function errorResponse(error: unknown, request?: Request): Response {
