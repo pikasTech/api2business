@@ -495,6 +495,61 @@ test("探活轮次把绑定修复失败写入 errorSummary", async () => {
   });
 });
 
+test("探活失败摘要保留模型尝试和空答案诊断", async () => {
+  let saved: Record<string, unknown> = {};
+  const store = { async addIdleProbeRound(input: Record<string, unknown>) { saved = input; } } as unknown as OperationsStore;
+  const service = new OperationsService({} as AppConfig, store, unusedReads);
+  const probe = (service as unknown as { idleProbe: { run: () => Promise<Record<string, unknown>> } }).idleProbe;
+  probe.run = async () => ({
+    ok: false,
+    planned: 2,
+    ready: 2,
+    attempted: 2,
+    succeeded: 0,
+    failed: 2,
+    repairedAccountIds: [],
+    repairFailures: [],
+    unreadyAccountIds: [],
+    results: [
+      {
+        accountId: 1614, ok: false, model: "gemini-4-argon",
+        modelAttempts: [{ attempt: 1, model: "gemini-4-argon", ok: false, httpStatus: 502,
+          classification: "error", answerClassification: "not_assessed", errorMarker: "upstream-error" }],
+      },
+      {
+        accountId: 1609, ok: false, model: "gemini-4-hydrogen",
+        modelAttempts: [
+          { attempt: 1, model: "gemini-4-argon", ok: false, httpStatus: 200,
+            classification: "alive", answerClassification: "empty", errorMarker: null },
+          { attempt: 2, model: "gemini-4-hydrogen", ok: false, httpStatus: 200,
+            classification: "alive", answerClassification: "empty", errorMarker: null },
+        ],
+      },
+    ],
+  });
+  await service.runIdleProbe([], 1, { operationId: "quality-failed-round", triggerType: "manual", scope: "gemini" });
+  expect(saved).toMatchObject({ status: "failed" });
+  expect(String(saved.errorSummary)).toBe(
+    "probe account 1614: http 502 classification=error answerClassification=not_assessed errorMarker=upstream-error model=gemini-4-argon; "
+    + "probe account 1609: http 200 classification=alive answerClassification=empty model=gemini-4-hydrogen attempts=2",
+  );
+});
+
+test("探活没有请求证据时明确说明缺少证据而不是泛称失败", async () => {
+  let saved: Record<string, unknown> = {};
+  const store = { async addIdleProbeRound(input: Record<string, unknown>) { saved = input; } } as unknown as OperationsStore;
+  const service = new OperationsService({} as AppConfig, store, unusedReads);
+  const probe = (service as unknown as { idleProbe: { run: () => Promise<Record<string, unknown>> } }).idleProbe;
+  probe.run = async () => ({
+    ok: false, planned: 1, ready: 0, attempted: 0, succeeded: 0, failed: 0,
+    repairedAccountIds: [], repairFailures: [], unreadyAccountIds: [], results: [],
+  });
+  await service.runIdleProbe([], 1, { operationId: "no-evidence-round", triggerType: "manual", scope: "gemini" });
+  expect(saved.errorSummary).toBe(
+    "idle probe failed before any probe evidence was recorded; check isolation binding and worker logs",
+  );
+});
+
 test("pool quality keeps successful scopes when one platform times out", async () => {
   const ledgerPath = "/tmp/a2b-pool-quality-ledger.yaml";
   writeFileSync(ledgerPath, "profit:\n  upstreamBalanceCnyPerApiUsd: 1\n");

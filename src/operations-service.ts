@@ -109,6 +109,22 @@ function boundedErrorMessage(error: unknown): string {
     .slice(0, 500);
 }
 
+function idleProbeFailureDetail(failure: Record<string, unknown>): string {
+  const attempts = records(failure.modelAttempts);
+  const last = attempts.length > 0 ? attempts[attempts.length - 1] : null;
+  const details: string[] = [];
+  const httpStatus = finiteNumber(last?.httpStatus);
+  if (httpStatus !== null) details.push(`http ${httpStatus}`);
+  for (const key of ["classification", "answerClassification", "errorMarker"]) {
+    const value = last?.[key];
+    if (typeof value === "string" && value.trim()) details.push(`${key}=${value.trim().slice(0, 80)}`);
+  }
+  const model = typeof failure.model === "string" ? failure.model : typeof last?.model === "string" ? last.model : null;
+  if (model) details.push(`model=${model}`);
+  if (attempts.length > 1) details.push(`attempts=${attempts.length}`);
+  return details.length > 0 ? details.join(" ") : "quality check failed without http or model evidence";
+}
+
 function idleProbeRoundErrorSummary(result: Record<string, unknown>): string | null {
   const parts: string[] = [];
   const repairFailures = records(result.repairFailures);
@@ -124,13 +140,22 @@ function idleProbeRoundErrorSummary(result: Record<string, unknown>): string | n
   if (unready.length > 0) {
     parts.push(`unready accounts: ${unready.slice(0, 20).join(",")}${unready.length > 20 ? ` (+${unready.length - 20})` : ""}`);
   }
-  const probeFailures = records(result.results).filter((item) => item.ok === false && item.error != null);
+  const allResults = records(result.results);
+  const probeFailures = allResults.filter((item) => item.ok === false);
   for (const failure of probeFailures.slice(0, 5)) {
     const accountId = finiteNumber(failure.accountId);
-    parts.push(`${accountId === null ? "probe" : `probe account ${accountId}`}: ${boundedErrorMessage(failure.error)}`);
+    const label = accountId === null ? "probe" : `probe account ${accountId}`;
+    const message = failure.error != null ? boundedErrorMessage(failure.error) : idleProbeFailureDetail(failure);
+    parts.push(`${label}: ${message}`);
   }
   if (probeFailures.length > 5) parts.push(`probe failures omitted: ${probeFailures.length - 5}`);
-  if (parts.length === 0 && result.ok === false) parts.push("idle probe failed without a specific error");
+  if (parts.length === 0 && result.ok === false) {
+    const attempted = finiteNumber(result.attempted) ?? allResults.length;
+    const failed = finiteNumber(result.failed) ?? 0;
+    parts.push(attempted > 0
+      ? `idle probe failed: no probe evidence recorded (attempted ${attempted}, failed ${failed})`
+      : "idle probe failed before any probe evidence was recorded; check isolation binding and worker logs");
+  }
   return parts.length > 0 ? parts.join("; ").slice(0, 1500) : null;
 }
 

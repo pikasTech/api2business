@@ -352,6 +352,7 @@ export class IdleAccountProbeService {
   // Each scheduling scope has an independent round. A slow Claude/Codex/Grok
   // round must not make the other scopes report a false in-flight skip.
   private readonly runningScopes = new Set<string>();
+  private readonly runningScopeStartedAt = new Map<string, number>();
 
   constructor(
     private readonly config: AppConfig,
@@ -591,9 +592,20 @@ export class IdleAccountProbeService {
     if (!Number.isInteger(rounds) || rounds < 1 || rounds > 10) throw new Error("idle probe rounds must be an integer from 1 to 10");
     const runningScope = scopeName ?? "codex";
     if (this.runningScopes.has(runningScope)) {
-      return { ok: true, skipped: true, scope: runningScope, reason: "in-flight", valuesPrinted: false };
+      const runningSince = this.runningScopeStartedAt.get(runningScope) ?? null;
+      return {
+        ok: true,
+        skipped: true,
+        scope: runningScope,
+        reason: "in-flight",
+        runningSince: runningSince === null ? null : new Date(runningSince).toISOString(),
+        runningForMs: runningSince === null ? null : Date.now() - runningSince,
+        hint: "wait for the running round to finish, then rerun or read accounts idle-probe history",
+        valuesPrinted: false,
+      };
     }
     this.runningScopes.add(runningScope);
+    this.runningScopeStartedAt.set(runningScope, Date.now());
     const startedAt = Date.now();
     const policy = this.config.sub2api.idleProbe;
     const scope = scopeName ? this.config.operations.upstreamSchedulingV2?.scopes[scopeName] : undefined;
@@ -756,6 +768,7 @@ export class IdleAccountProbeService {
       };
     } finally {
       this.runningScopes.delete(runningScope);
+      this.runningScopeStartedAt.delete(runningScope);
     }
   }
 }
