@@ -502,11 +502,11 @@ test("探活失败摘要保留模型尝试和空答案诊断", async () => {
   const probe = (service as unknown as { idleProbe: { run: () => Promise<Record<string, unknown>> } }).idleProbe;
   probe.run = async () => ({
     ok: false,
-    planned: 2,
-    ready: 2,
-    attempted: 2,
+    planned: 3,
+    ready: 3,
+    attempted: 3,
     succeeded: 0,
-    failed: 2,
+    failed: 3,
     repairedAccountIds: [],
     repairFailures: [],
     unreadyAccountIds: [],
@@ -515,6 +515,11 @@ test("探活失败摘要保留模型尝试和空答案诊断", async () => {
         accountId: 1614, ok: false, model: "gemini-4-argon",
         modelAttempts: [{ attempt: 1, model: "gemini-4-argon", ok: false, httpStatus: 502,
           classification: "error", answerClassification: "not_assessed", errorMarker: "upstream-error" }],
+      },
+      {
+        accountId: 1603, ok: false, model: "gemini-4-argon",
+        modelAttempts: [{ attempt: 1, model: "gemini-4-argon", ok: false, httpStatus: null,
+          classification: "error", answerClassification: "not_assessed", errorMarker: "request-timeout" }],
       },
       {
         accountId: 1609, ok: false, model: "gemini-4-hydrogen",
@@ -531,6 +536,7 @@ test("探活失败摘要保留模型尝试和空答案诊断", async () => {
   expect(saved).toMatchObject({ status: "failed" });
   expect(String(saved.errorSummary)).toBe(
     "probe account 1614: http 502 classification=error answerClassification=not_assessed errorMarker=upstream-error model=gemini-4-argon; "
+    + "probe account 1603: classification=error answerClassification=not_assessed errorMarker=request-timeout model=gemini-4-argon; "
     + "probe account 1609: http 200 classification=alive answerClassification=empty model=gemini-4-hydrogen attempts=2",
   );
 });
