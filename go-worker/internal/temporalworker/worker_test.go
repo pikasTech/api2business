@@ -37,6 +37,7 @@ operations:
       grok: { enabled: true, platform: grok, features: { priorityAutomation: true, idleProbe: true } }
       deepseek: { enabled: true, platform: deepseek, features: { priorityAutomation: true, idleProbe: true, modelSyncAutomation: true } }
       opencode: { enabled: true, platform: opencode_go, features: { priorityAutomation: true, idleProbe: true, modelSyncAutomation: true } }
+      gemini: { enabled: true, platform: gemini, features: { priorityAutomation: true, idleProbe: true, modelSyncAutomation: true } }
   upstreamManagement: { quotaSampleIntervalSeconds: 300, quotaSampleTimeoutSeconds: 240 }
 temporal:
   addressEnv: TEMPORAL_ADDRESS
@@ -71,14 +72,14 @@ runtime:
 	if !cfg.AutomaticRefreshEnabled || cfg.V2AutomationIntervalSeconds != 120 || cfg.V2AutomationRecentCallLimit != 1000 {
 		t.Fatalf("missing periodic worker config: %#v", cfg)
 	}
-	if strings.Join(cfg.V2IdleProbeScopes, ",") != "claude,codex,deepseek,grok" {
-		t.Fatalf("expected Claude, Codex, DeepSeek and Grok idle probe scopes, got %#v", cfg.V2IdleProbeScopes)
+	if strings.Join(cfg.V2IdleProbeScopes, ",") != "claude,codex,deepseek,gemini,grok" {
+		t.Fatalf("expected Claude, Codex, DeepSeek, Gemini and Grok idle probe scopes, got %#v", cfg.V2IdleProbeScopes)
 	}
 	if cfg.V2IdleProbeIntervals["codex"] != 60 || cfg.V2IdleProbeIntervals["claude"] != 300 || cfg.V2IdleProbeIntervals["grok"] != 60 {
 		t.Fatalf("unexpected scoped idle probe intervals: %#v", cfg.V2IdleProbeIntervals)
 	}
-	if len(cfg.V2ModelSyncScopes) != 0 {
-		t.Fatalf("expected disabled platforms to produce no automatic model sync scopes, got %#v", cfg.V2ModelSyncScopes)
+	if strings.Join(cfg.V2ModelSyncScopes, ",") != "gemini" {
+		t.Fatalf("expected Gemini to remain eligible for automatic model sync, got %#v", cfg.V2ModelSyncScopes)
 	}
 	if strings.Join(cfg.V2AutomaticDisabledPlatforms, ",") != "command_code,deepseek,opencode_go" {
 		t.Fatalf("expected YAML-owned disabled platforms, got %#v", cfg.V2AutomaticDisabledPlatforms)

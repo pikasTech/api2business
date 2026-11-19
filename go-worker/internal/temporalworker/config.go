@@ -198,14 +198,14 @@ func LoadConfig(args []string, get func(string) string) (Config, error) {
 			if scope.Features.PriorityAutomation {
 				v2PriorityAutomationScopes = append(v2PriorityAutomationScopes, name)
 			}
-			if scope.Features.IdleProbe && (scope.Platform == "openai" || scope.Platform == "anthropic" || scope.Platform == "grok" || scope.Platform == "deepseek") {
+			if scope.Features.IdleProbe && (scope.Platform == "openai" || scope.Platform == "anthropic" || scope.Platform == "grok" || scope.Platform == "deepseek" || scope.Platform == "gemini") {
 				v2IdleProbeScopes = append(v2IdleProbeScopes, name)
 			}
 			if scope.Features.ModelSyncAutomation {
 				if _, disabled := automaticDisabledPlatforms[strings.ToLower(strings.TrimSpace(scope.Platform))]; disabled {
 					continue
 				}
-				if scope.Platform == "openai" || scope.Platform == "anthropic" || scope.Platform == "grok" {
+				if scope.Platform == "openai" || scope.Platform == "anthropic" || scope.Platform == "grok" || scope.Platform == "gemini" {
 					v2ModelSyncScopes = append(v2ModelSyncScopes, name)
 				}
 			}
