@@ -60,8 +60,7 @@ describe("upstream scheduling v2 probe cache UI", () => {
 
     const styleRevision = /\/styles\.css\?v=([^"]+)/u.exec(html)?.[1];
     const appRevision = /\/app\.js\?v=([^"]+)/u.exec(html)?.[1];
-    expect(styleRevision).toBeTruthy();
-    expect(appRevision).toBeTruthy();
+    if (!styleRevision || !appRevision) throw new Error("page revision is missing from the V2 HTML");
     expect(app).toContain(`upstream-scheduling-v2.js?v=${appRevision}`);
 
     const pageNames = readdirSync(new URL("../static/", import.meta.url)).filter((name) => name.endsWith(".html"));
