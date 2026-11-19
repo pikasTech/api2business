@@ -133,8 +133,8 @@ function parseGroupIds(raw: string | null, command: string): number[] {
   return [...new Set(values)].sort((left, right) => left - right);
 }
 
-const poolQualityScopes = ["codex", "claude", "grok", "deepseek"] as const;
-const schedulingPlatforms = ["openai", "anthropic", "grok", "deepseek"] as const;
+const poolQualityScopes = ["codex", "claude", "grok", "deepseek", "gemini"] as const;
+const schedulingPlatforms = ["openai", "anthropic", "grok", "deepseek", "gemini"] as const;
 
 export function poolQualityScope(platform: string | null, scope: string | null): typeof poolQualityScopes[number] {
   if (platform !== null && scope !== null && platform !== scope) {
@@ -142,7 +142,7 @@ export function poolQualityScope(platform: string | null, scope: string | null):
   }
   const selected = platform ?? scope ?? "codex";
   if (!poolQualityScopes.includes(selected as typeof poolQualityScopes[number])) {
-    throw new Error("scores pool-quality requires --scope or --platform codex|claude|grok|deepseek");
+    throw new Error("scores pool-quality requires --scope or --platform codex|claude|grok|deepseek|gemini");
   }
   return selected as typeof poolQualityScopes[number];
 }
@@ -151,7 +151,7 @@ export function assertSchedulingRuntimeQuery(group: string | null, platform: str
   const groupId = Number(group);
   if (!group || !/^\d+$/u.test(group) || !Number.isSafeInteger(groupId) || groupId < 1
     || !schedulingPlatforms.includes(platform as typeof schedulingPlatforms[number])) {
-    throw new Error("reads runtime requires --group <positive-id> --platform openai|anthropic|grok|deepseek");
+    throw new Error("reads runtime requires --group <positive-id> --platform openai|anthropic|grok|deepseek|gemini");
   }
   return { group, platform: platform! };
 }
@@ -225,6 +225,9 @@ export function parseArgs(args: string[]): Parsed {
     if (flags.has(item)) continue;
     if (item.startsWith("--")) throw new Error(`unknown option ${item}`);
     command.push(item);
+  }
+  if (command.join(" ") === "scores rank" && value(args, "--scope") !== null) {
+    throw new Error("scores rank 不支持 --scope；请改用 --group/--account，或用 upstream-scheduling-v2 snapshot --scope <scope>");
   }
   const integer = (name: string): number | null => {
     const raw = value(args, name);
@@ -329,20 +332,20 @@ function help(): Record<string, unknown> {
       "config validate",
       "backend check",
       "scores get|pool-quality-refresh|refresh|rank [--calls N] [--account <id-or-name>] [--group <id-or-exact-name>]|aggregate-smoke",
-      "scores pool-quality [--scope codex|claude|grok|deepseek] [--platform <same scope>] --over-api <absolute-http(s)-URL> (default codex)",
-      "upstream-scheduling-v2 scopes|plan [--scope codex|claude|grok|deepseek] --over-api <absolute-http(s)-URL> (read-only; Codex phase first)",
-      "upstream-scheduling-v2 snapshot [--scope codex|claude|grok|deepseek] [--refresh|--cache-only] --over-api <absolute-http(s)-URL> (read-only read-model query; default cache with background refresh)",
-      "upstream-scheduling-v2 priority-run --scope codex|claude|grok|deepseek|opencode [--confirm] --over-api <absolute-http(s)-URL> (manual priority adjustment)",
-      "upstream-scheduling-v2 model-sync plan|run|history [--scope codex|claude|grok|deepseek] [--accounts id,...] [--confirm] --over-api <absolute-http(s)-URL>",
+      "scores pool-quality [--scope codex|claude|grok|deepseek|gemini] [--platform <same scope>] --over-api <absolute-http(s)-URL> (default codex)",
+      "upstream-scheduling-v2 scopes|plan [--scope codex|claude|grok|deepseek|gemini] --over-api <absolute-http(s)-URL> (read-only; Codex phase first)",
+      "upstream-scheduling-v2 snapshot [--scope codex|claude|grok|deepseek|gemini] [--refresh|--cache-only] --over-api <absolute-http(s)-URL> (read-only read-model query; default cache with background refresh)",
+      "upstream-scheduling-v2 priority-run --scope codex|claude|grok|deepseek|opencode|gemini [--confirm] --over-api <absolute-http(s)-URL> (manual priority adjustment)",
+      "upstream-scheduling-v2 model-sync plan|run|history [--scope codex|claude|grok|deepseek|gemini] [--accounts id,...] [--confirm] --over-api <absolute-http(s)-URL>",
       "reads status --over-api <absolute-http(s)-URL>",
-      "reads runtime --group <positive-id> --platform openai|anthropic|grok|deepseek --over-api <absolute-http(s)-URL> (read-only live availability/concurrency/native version)",
+      "reads runtime --group <positive-id> --platform openai|anthropic|grok|deepseek|gemini --over-api <absolute-http(s)-URL> (read-only live availability/concurrency/native version)",
       "observability report|costs|probe-costs|get|check|configure --help",
       "errors aggregate [--start ISO --end ISO] [--limit N] [--top N] [--account <id-or-name>] [--group <id-or-exact-name>]",
       "errors diagnose [--start ISO --end ISO] [--request-id <request-id>] [--model <exact-id>] [--limit N] [--top N] [--account <id-or-name>] [--group <id-or-exact-name>]",
       "errors cooldowns [--since <ISO>] [--until <ISO>] [--limit N] [--account <id-or-name>] [--model <exact-id>]",
       "errors inspect --request-id <request-id>",
       "errors commit-stage --request-id <request-id>",
-      "errors list [--limit N]",
+      "errors list [--limit N] [--start ISO --end ISO]",
       "errors external-cutoff-match [--limit N]",
       "errors get --request-id <request-id>",
       "reads query --file <broker-read-request.json> --over-api <absolute-http(s)-URL> (read-only broker)",
@@ -356,7 +359,7 @@ function help(): Record<string, unknown> {
       "api smoke --over-api <absolute-http(s)-URL>",
       "web screenshot [--profile <owning smoke profile>] [--scope <enabled scope>] [--selector <css>] [--click-selector <css>] [--session-ttl-seconds N] [--burst-count 1..30] [--burst-interval 200ms..10s] [--manifest <absolute path>] --over-api <absolute-http(s)-URL>",
       "workflow status --id <workflow-id>",
-      "priority history --over-api <absolute-http(s)-URL> [--scope codex|claude|grok|deepseek|opencode] [--account <positive-id>]",
+      "priority history --over-api <absolute-http(s)-URL> [--scope codex|claude|grok|deepseek|opencode|gemini] [--account <positive-id>]",
       "accounts import --file <json|ndjson|zip> --unit-cost-cny <CNY> [--plan-type k12|plus|team|free] [--priority 1 --capacity 3 --rate-multiplier 1000 --groups 2,3 --proxy-id 0] [--confirm] --over-api <absolute-http(s)-URL>",
       "accounts status --id <job-id> --over-api <absolute-http(s)-URL>",
       "accounts inspect --accounts <id-or-range,...> [--over-api <absolute-http(s)-URL>]",
@@ -368,12 +371,12 @@ function help(): Record<string, unknown> {
       "accounts oauth-economics [--profile codex|grok] [--over-api <absolute-http(s)-URL>]",
       "accounts oauth-runtime [--profile codex|grok] [--over-api <absolute-http(s)-URL>]",
       "accounts oauth-runtime-sample --over-api <absolute-http(s)-URL>",
-      "accounts idle-probe plan [--accounts <id-or-range,...>] [--scope codex|claude|grok|deepseek] --over-api <absolute-http(s)-URL>",
-      "accounts idle-probe history [--scope codex|claude|grok|deepseek] [--page N] --over-api <absolute-http(s)-URL>",
-      "accounts idle-probe coverage [--scope codex|claude|grok|deepseek] [--window-minutes N] --over-api <absolute-http(s)-URL>",
-      "accounts idle-probe reconcile [--accounts <id-or-range,...>] [--scope codex|claude|grok|deepseek] [--confirm] --over-api <absolute-http(s)-URL>",
-      "accounts idle-probe run [--accounts <id-or-range,...>] [--scope codex|claude|grok|deepseek] [--rounds 1..10] [--confirm] --over-api <absolute-http(s)-URL>",
-      "accounts math-probe --scope codex|claude|grok|deepseek --accounts <id-or-range,...> [--model <id>] [--json] (L0 direct CLI; no service required)",
+      "accounts idle-probe plan [--accounts <id-or-range,...>] [--scope codex|claude|grok|deepseek|gemini] --over-api <absolute-http(s)-URL>",
+      "accounts idle-probe history [--scope codex|claude|grok|deepseek|gemini] [--page N] --over-api <absolute-http(s)-URL>",
+      "accounts idle-probe coverage [--scope codex|claude|grok|deepseek|gemini] [--window-minutes N] --over-api <absolute-http(s)-URL>",
+      "accounts idle-probe reconcile [--accounts <id-or-range,...>] [--scope codex|claude|grok|deepseek|gemini] [--confirm] --over-api <absolute-http(s)-URL>",
+      "accounts idle-probe run [--accounts <id-or-range,...>] [--scope codex|claude|grok|deepseek|gemini] [--rounds 1..10] [--confirm] --over-api <absolute-http(s)-URL>",
+      "accounts math-probe --scope codex|claude|grok|deepseek|gemini --accounts <id-or-range,...> [--model <id>] [--json] (L0 direct CLI; no service required)",
       "accounts lifecycle detect --day YYYY-MM-DD --plan-type k12|plus [--model <id>] [--confirm] --over-api <absolute-http(s)-URL>",
       "accounts lifecycle retire plan [--day YYYY-MM-DD] [--scope pool|day] [--plan-type k12|plus|team|free|all] [--selection dead|all] [--unit-cost-cny CNY] --over-api <absolute-http(s)-URL>",
       "accounts lifecycle retire status --id <plan-id> --over-api <absolute-http(s)-URL>",
@@ -393,7 +396,7 @@ function help(): Record<string, unknown> {
       "upstreams template [--accounts <id-or-range,...>] [--confirm] --over-api <absolute-http(s)-URL>",
       "upstreams initialize --accounts <id-or-range,...> [--confirm] --over-api <absolute-http(s)-URL> (模板、探活及 Codex 强制 Responses)",
       "upstreams isolation --accounts <id-or-range,...> [--confirm] --over-api <absolute-http(s)-URL>",
-      "upstreams create --platform openai|grok|anthropic|deepseek --base-url <https-url> --suffix <name> --groups <id,id,...> [--pool-mode true|false] [--rate <temporary CNY/API_USD>] [--priority 1 --capacity 16 --recharge-cny CNY] --api-key-stdin [--confirm] --over-api <absolute-http(s)-URL>",
+      "upstreams create --platform openai|grok|anthropic|deepseek|gemini --base-url <https-url> --suffix <name> --groups <id,id,...> [--pool-mode true|false] [--rate <temporary CNY/API_USD>] [--priority 1 --capacity 16 --recharge-cny CNY] --api-key-stdin [--confirm] --over-api <absolute-http(s)-URL>",
       "upstreams update --id <account-id> [--base-url <https-url>] [--suffix <name>] [--rate <CNY/API_USD>] [--groups <id,id,...>] [--template-only] [--confirm] --over-api <absolute-http(s)-URL>",
       "upstreams recharge --base-url <https-url> --recharge-cny <CNY> [--idempotency-key <key>] [--confirm] --over-api <absolute-http(s)-URL>",
       "upstreams recharge-status --id <workflow-id> --over-api <absolute-http(s)-URL>",
@@ -544,12 +547,12 @@ async function bugTeamCommand(parsed: Parsed, config: ReturnType<typeof loadConf
   throw new Error(`unknown command: ${parsed.command.join(" ")}`);
 }
 
-const priorityHistoryScopes = new Set(["codex", "claude", "grok", "deepseek", "opencode"]);
+const priorityHistoryScopes = new Set(["codex", "claude", "grok", "deepseek", "opencode", "gemini"]);
 const priorityHistoryDisplayLimit = 20;
 
 export function assertPriorityHistoryScope(scope: string | null): void {
   if (scope !== null && !priorityHistoryScopes.has(scope)) {
-    throw new Error("--scope must be codex, claude, grok, deepseek, or opencode");
+    throw new Error("--scope must be codex, claude, grok, deepseek, opencode, or gemini");
   }
 }
 
@@ -1043,7 +1046,7 @@ async function remote(parsed: Parsed, config: ReturnType<typeof loadConfig>, tar
     return await verifyRechargeWorkflow(client, { workflowId: parsed.id });
   }
   if (group === "upstreams" && action === "create") {
-    if (!parsed.platform || !["openai", "grok", "anthropic", "deepseek"].includes(parsed.platform)) throw new Error("upstreams create requires --platform openai|grok|anthropic|deepseek");
+    if (!parsed.platform || !["openai", "grok", "anthropic", "deepseek", "gemini"].includes(parsed.platform)) throw new Error("upstreams create requires --platform openai|grok|anthropic|deepseek|gemini");
     if (!parsed.baseUrl || !parsed.suffix) throw new Error("upstreams create requires --base-url and --suffix");
     const groupIds = parseGroupIds(parsed.groups, "upstreams create");
     if (!parsed.apiKeyStdin) throw new Error("upstreams create requires --api-key-stdin; API keys are never accepted in argv");
@@ -1376,8 +1379,8 @@ async function remote(parsed: Parsed, config: ReturnType<typeof loadConfig>, tar
     if (action === "plan") return await client.upstreamSchedulingV2Plan(parsed.scope);
     if (action === "priority-run") {
       const scope = parsed.scope;
-      if (scope !== "codex" && scope !== "claude" && scope !== "grok" && scope !== "deepseek" && scope !== "opencode") {
-        throw new Error("upstream-scheduling-v2 priority-run requires --scope codex|claude|grok|deepseek|opencode");
+      if (scope !== "codex" && scope !== "claude" && scope !== "grok" && scope !== "deepseek" && scope !== "opencode" && scope !== "gemini") {
+        throw new Error("upstream-scheduling-v2 priority-run requires --scope codex|claude|grok|deepseek|opencode|gemini");
       }
       const recentCallLimit = config.operations.upstreamSchedulingV2?.automation.recentCallLimit
         ?? config.monitor.recentCallLimit;
@@ -1490,7 +1493,12 @@ async function remote(parsed: Parsed, config: ReturnType<typeof loadConfig>, tar
     return summarizeErrorCommitStage(parsed.requestId, result.rows);
   }
   if (group === "errors" && action === "list") {
-    return await client.errorList(parsed.limit ?? config.monitor.errorAggregateLimit);
+    assertObservationWindow(parsed.start, parsed.end);
+    return await client.errorList(
+      parsed.limit ?? config.monitor.errorAggregateLimit,
+      parsed.start ?? null,
+      parsed.end ?? null,
+    );
   }
   if (group === "errors" && action === "external-cutoff-match") {
     return await client.externalCutoffMatches(parsed.limit ?? config.monitor.errorAggregateLimit);
@@ -1561,8 +1569,8 @@ export async function runMathProbeL0(
   config: ReturnType<typeof loadConfig>,
 ): Promise<Record<string, unknown>> {
   const scopeName = parsed.scope;
-  if (scopeName !== "codex" && scopeName !== "claude" && scopeName !== "grok" && scopeName !== "deepseek") {
-    throw new Error("accounts math-probe requires --scope codex|claude|grok|deepseek");
+  if (scopeName !== "codex" && scopeName !== "claude" && scopeName !== "grok" && scopeName !== "deepseek" && scopeName !== "gemini") {
+    throw new Error("accounts math-probe requires --scope codex|claude|grok|deepseek|gemini");
   }
   if (!parsed.accounts) throw new Error("accounts math-probe requires --accounts");
   const accountIds = parseAccountIdSelector(parsed.accounts);

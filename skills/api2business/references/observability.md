@@ -43,6 +43,9 @@ bun skills/api2business/scripts/api2business-cli.ts --config config/api2business
 - `consumption-stalls` 独立读取当前与上一同口径窗口，只返回真实用户请求和实际成本口径下的停滞读模型。
   - 报告同时包含 `consumptionStalls`；强触发按钱包和平台聚合为稳定 `alertId`/`fingerprint`。
   - 逐账号保留 `healthy`、`consumption-stalled`、`watch`、`demand-insufficient` 和排除原因，不把低优先级回填解释为健康。
+  - `alerts` 按钱包聚合；逐账号强触发证据从 `records` 取 `classification=consumption-stalled`、
+    `reasonCodes` 仅含 `zero-consumption-both-windows` 或 `consumption-drop-exceeded`、
+    新鲜正余额且 `platformTrafficDropPercent` 低于 max 阈值；报告分别写账号级信号数与钱包级 alerts 数，不互相替代。
   - owning YAML 字段为 `observability.consumptionStallDropPercent`、`consumptionStallMinimumDemandRequests` 和
     `consumptionStallMaxTrafficDropPercent`；缺省值分别为 90、1、50。
 - `costs` 默认独立读取过去 168 小时的逐日成本与共享钱包余额。
@@ -67,7 +70,7 @@ bun skills/api2business/scripts/api2business-cli.ts --config config/api2business
     [探活成本](../../../docs/specs/operational-observability.md#探活成本)，不在本文复制公式。
   - 2026-11-14 用户批准的成本控制基线：探活固定前缀缩短到 128 个示例（约 1K token，
     仍高于 1024 token 的最小缓存长度）；作用域周期为 codex 180 秒、claude 900 秒、
-    grok 180 秒、deepseek 120 秒。调整时按作用域显式设置，不整体回退到旧的 90/300 秒。
+    grok 180 秒、deepseek 120 秒、gemini 900 秒。调整时按作用域显式设置，不整体回退到旧的 90/300 秒。
 - 成本范围、非 API-key 的“不需对账”和覆盖率分母只见
   [钱包与实际成本](../../../docs/specs/operational-observability.md#钱包与实际成本)。
 - `upstream-scheduling-v2 snapshot` 的缓存读取、刷新与互斥参数只见
@@ -126,6 +129,15 @@ bun skills/api2business/scripts/api2business-cli.ts --config config/api2business
   - 已知部分可为零；完整成本未知必须保持 `null`。
 - 既有 HTTP 502、后续读取成功和发布重启分别记录。
   - 仅凭最新健康正常不能追认历史根因，更不能宣称持续恢复。
+- `errors aggregate`/`diagnose` 的按账号查询在窗口内无命中时返回 HTTP 409
+  `account selector resolved no recent errors`；这是“零条”证据，不是查询失败，
+  不重试、不当未知。只有非 409 错误才按查询失败处理。
+  - 有账号、`error_phase=routing`、上游 401/403 的错误归 `upstream_permission`，
+    不得落入 `business_limit`；`business_limit` 只表示下游用户或 API Key 额度限制。
+- `errors list` 默认剔除探活流量，并返回 `probeRowsExcluded`。
+  - 探活身份：`api2business-probe-*` Key、monitor-user 邮箱或 probe 分组。
+  - 探活行仍带 `probe=true`，且 `customerVisible=false`；探活 403 不是客户可见错误。
+  - 需要核对探活失败时用 `errors diagnose` 的独立口径，不从错误主列表推断事故。
 
 ## HTTP 慢请求
 
@@ -153,7 +165,7 @@ bun skills/api2business/scripts/api2business-cli.ts --config config/api2business
 
 ## 原生调度诊断补充
 
-- `reads runtime --group <正整数> --platform openai|anthropic|grok|deepseek --over-api <绝对URL>`
+- `reads runtime --group <正整数> --platform openai|anthropic|grok|deepseek|gemini --over-api <绝对URL>`
   读取当前可用性、并发与 `nativeVersion`。
   - 版本来自 Sub2API `/admin/system/version`，不以配置镜像标签代替。
   - 版本查询失败单独显示未知，不丢弃成功取得的容量证据。

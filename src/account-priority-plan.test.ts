@@ -210,7 +210,7 @@ test("Claude priority planning isolates Anthropic group 119 and preserves the ra
 test("Grok can force a canonical top-k distribution that starts at the configured minimum", () => {
   const grokConfig = structuredClone(config);
   grokConfig.sub2api.grokPriorityPlan.forceNormalizedTopK = true;
-  const rows = [
+  const rows: Array<Record<string, any>> = [
     { ...account(101, "https://grok-a.example grok 0.06", 95), platform: "grok", groupIds: [6], priority: 111 },
     { ...account(102, "https://grok-b.example grok 0.09", 90), platform: "grok", groupIds: [6], priority: 121 },
     { ...account(103, "https://grok-c.example grok 0.1", 85), platform: "grok", groupIds: [6], priority: 132 },
@@ -1118,4 +1118,29 @@ test("available zero-sample accounts use 150 when every current priority is the 
   expect(scored.every((row) => row.priorityMode === "zero-sample-fallback")).toBeTrue();
   expect(scored.every((row) => row.desiredPriority === 150)).toBeTrue();
   expect(changes.find((row) => row.accountId === 401)?.priorityMode).toBe("topk-tail");
+});
+
+test("Gemini zero-sample accounts enter the isolated trial scope at the 150 fallback priority", () => {
+  const geminiConfig = structuredClone(config);
+  (geminiConfig.sub2api as AppConfig["sub2api"]).geminiPriorityPlan = {
+    ...geminiConfig.sub2api.priorityPlan,
+    platform: "gemini",
+    eligibleGroupIds: [665],
+    costWeight: 0,
+    procurementAdvice: { ...geminiConfig.sub2api.priorityPlan.procurementAdvice, enabled: false },
+  };
+  const rows: Array<Record<string, any>> = [
+    { ...account(601, "gemini-plus", 0), platform: "gemini", groupIds: [665], priority: 300, score: null, observedAttempts: 0 },
+    { ...account(602, "gemini-pro", 0), platform: "gemini", groupIds: [665], priority: 300, score: null, observedAttempts: 0 },
+  ];
+  for (const row of rows) delete row.scoreComponents;
+  const plan = buildAccountPriorityPlan({ recentCallLimit: 1000, accounts: rows }, geminiConfig);
+  expect(plan.profiles).toMatchObject({ gemini: { changedCount: 2 } });
+  expect(plan.changes).toContainEqual(expect.objectContaining({
+    profile: "gemini", accountId: 601, priorityMode: "zero-sample-fallback", desiredPriority: 150,
+  }));
+  expect(plan.changes).toContainEqual(expect.objectContaining({
+    profile: "gemini", accountId: 602, priorityMode: "zero-sample-fallback", desiredPriority: 150,
+  }));
+  expect(plan.priorities).toMatchObject({ "601": 150, "602": 150 });
 });

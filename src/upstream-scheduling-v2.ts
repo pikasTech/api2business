@@ -545,6 +545,8 @@ export class UpstreamSchedulingV2Service {
           ? "grok"
           : scope.platform === "deepseek"
             ? "deepseek"
+            : scope.platform === "gemini"
+              ? "gemini"
             : null;
     const unsupportedQualityProfile = qualityProfile === null
       ? { ok: false, platform: scopeName, groupIds: scope.eligibleGroupIds,

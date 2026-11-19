@@ -99,7 +99,7 @@ export class AdminHttpClient {
     if (scope) query.set("scope", scope);
     return this.request(`/api/v2/upstream-scheduling/model-sync?${query}`);
   }
-  poolQuality(platform: "codex" | "claude" | "grok" | "deepseek" = "codex"): Promise<Record<string, unknown>> {
+  poolQuality(platform: "codex" | "claude" | "grok" | "deepseek" | "gemini" = "codex"): Promise<Record<string, unknown>> {
     const query = new URLSearchParams({ platform });
     return this.request(`/api/upstreams/pool-quality?${query}`, {}, 60000);
   }
@@ -451,8 +451,11 @@ export class AdminHttpClient {
     if (end) query.set("end", end);
     return this.request(`/api/admin/errors/diagnose?${query}`, {}, 60000);
   }
-  errorList(limit: number): Promise<Record<string, unknown>> {
-    return this.request(`/api/admin/errors?limit=${limit}`, {}, 60000);
+  errorList(limit: number, start: string | null = null, end: string | null = null): Promise<Record<string, unknown>> {
+    const query = new URLSearchParams({ limit: String(limit) });
+    if (start) query.set("start", start);
+    if (end) query.set("end", end);
+    return this.request(`/api/admin/errors?${query}`, {}, 60000);
   }
   errorRequest(requestId: string): Promise<Record<string, unknown>> {
     return this.request(

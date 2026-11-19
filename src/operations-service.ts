@@ -963,7 +963,7 @@ export class OperationsService {
     const valuation = readUpstreamValuationPolicy(this.config.operations.ledgerYamlPath);
     const samples = [];
     const failures: Array<{ platform: string; error: string }> = [];
-    for (const platform of ["codex", "claude", "grok", "deepseek"] as const) {
+    for (const platform of ["codex", "claude", "grok", "deepseek", "gemini"] as const) {
       try {
         const sample = await collectPoolQualitySample(this.config, this.reads, sampledAt, platform);
         sample.participation = sample.participation.map((item) => {
@@ -1004,7 +1004,7 @@ export class OperationsService {
     };
   }
 
-  async poolQualitySummary(platform: "codex" | "claude" | "grok" | "deepseek" = "codex") {
+  async poolQualitySummary(platform: "codex" | "claude" | "grok" | "deepseek" | "gemini" = "codex") {
     const rollingWindowPoints = 100;
     const rows = await this.store.getPoolQualitySamplesByLimit(rollingWindowPoints * 2 - 1, platform) as Array<Record<string, unknown>>;
     const history = poolQualityHistory(rows, rollingWindowPoints).slice(-rollingWindowPoints);
@@ -1023,6 +1023,8 @@ export class OperationsService {
           ? this.config.sub2api.grokPriorityPlan
           : platform === "deepseek"
             ? (this.config.sub2api.deepseekPriorityPlan ?? this.config.sub2api.priorityPlan)
+            : platform === "gemini"
+              ? (this.config.sub2api.geminiPriorityPlan ?? this.config.sub2api.priorityPlan)
             : this.config.sub2api.priorityPlan).eligibleGroupIds,
       sampledAt,
       sampleStale: sampledAt === null || Date.now() - Date.parse(sampledAt) > samplingBudgetMs,
@@ -1065,7 +1067,7 @@ export class OperationsService {
   }
 
   async poolQualityErrors(input: {
-    platform: "codex" | "claude" | "grok" | "deepseek";
+    platform: "codex" | "claude" | "grok" | "deepseek" | "gemini";
     page: number;
     pageSize: number;
     filter: PoolQualityErrorFilter;
@@ -1749,14 +1751,14 @@ export class OperationsService {
         const operatorScope = String(row.created_by ?? row.operator ?? "")
           .match(/^v2-scheduler:([a-z0-9_-]+)$/)?.[1] ?? null;
         const defaultProfile = operatorScope !== null
-          && ["codex", "claude", "grok", "deepseek", "opencode"].includes(operatorScope)
+          && ["codex", "claude", "grok", "deepseek", "opencode", "gemini"].includes(operatorScope)
           ? operatorScope
           : "codex";
         const discoveredProfiles = new Set([
           ...Object.keys(profileSummary),
           ...changes.map((change) => String(change.profile ?? defaultProfile)).filter(Boolean),
         ]);
-        const profiles = ["codex", "claude", "grok", "deepseek", "opencode"]
+        const profiles = ["codex", "claude", "grok", "deepseek", "opencode", "gemini"]
           .filter((profile) => discoveredProfiles.has(profile));
         if (profiles.length === 0) profiles.push(defaultProfile);
         const startedAt = row.execution_started_at ?? row.created_at;
@@ -2117,12 +2119,14 @@ export class OperationsService {
     );
   }
 
-  async errorList(limit: number) {
+  async errorList(limit: number, start: string | null = null, end: string | null = null) {
     return await collectErrorListFromDatabase(
       this.config,
       this.reads,
       limit,
       "manual",
+      start,
+      end,
     );
   }
 

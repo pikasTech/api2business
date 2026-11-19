@@ -106,7 +106,7 @@ test("priority history scope keeps matching rounds and discloses omissions", () 
   expect(selectPriorityHistory({ records }, "opencode").records).toEqual([
     { id: "oc", profile: "opencode", profiles: ["opencode"], created_by: "v2-scheduler:opencode" },
   ]);
-  expect(() => selectPriorityHistory({ records: [] }, "openai")).toThrow("codex, claude, grok, deepseek, or opencode");
+  expect(() => selectPriorityHistory({ records: [] }, "openai")).toThrow("codex, claude, grok, deepseek, opencode, or gemini");
 });
 
 test("priority history human diagnostics expose query, snapshot age, block and recovery", () => {
@@ -132,9 +132,11 @@ test("pool quality reads the requested scope and runtime evidence accepts deepse
   expect(poolQualityScope("claude", null)).toBe("claude");
   expect(poolQualityScope(null, "deepseek")).toBe("deepseek");
   expect(poolQualityScope("grok", "grok")).toBe("grok");
-  expect(() => poolQualityScope("openai", null)).toThrow("codex|claude|grok|deepseek");
+  expect(poolQualityScope(null, "gemini")).toBe("gemini");
+  expect(() => poolQualityScope("openai", null)).toThrow("codex|claude|grok|deepseek|gemini");
   expect(() => poolQualityScope("codex", "claude")).toThrow("same scope");
   expect(assertSchedulingRuntimeQuery("131", "deepseek")).toEqual({ group: "131", platform: "deepseek" });
+  expect(assertSchedulingRuntimeQuery("665", "gemini")).toEqual({ group: "665", platform: "gemini" });
   expect(() => assertSchedulingRuntimeQuery("131", "codex")).toThrow("deepseek");
 });
 
@@ -146,4 +148,16 @@ test("workflow summary exposes partial initialization and an in-flight probe", (
   expect(summary).toMatchObject({ resultOk: false, onboardingStatus: "partial", configurationVerified: 1,
     probeVerified: 0, probes: [{ skipped: true, reason: "in-flight" }] });
   expect(summary.nextAction).toContain("upstreams initialize");
+});
+
+test("scores rank rejects unsupported --scope instead of silently returning global ranking", () => {
+  expect(() => parseArgs(["--config", "config/api2business.yaml", "scores", "rank", "--scope", "claude"]))
+    .toThrow("scores rank 不支持 --scope");
+  expect(parseArgs(["--config", "config/api2business.yaml", "scores", "rank", "--calls", "100"]).scope).toBeNull();
+});
+
+test("upstreams model-alias help stays operation-scoped", () => {
+  const help = operationHelp(["upstreams", "model-alias", "--help"]);
+  expect(help).toMatchObject({ ok: true, command: "upstreams model-alias" });
+  expect(JSON.stringify(help)).toContain("--upstream-model");
 });

@@ -312,15 +312,25 @@ WITH target_accounts AS (
     MAX(latest_record_at) AS latest_record_at
   FROM recent_records
   GROUP BY account_id
+), business_samples AS (
+  SELECT u.account_id, COUNT(*)::int AS business_sample_count,
+    MAX(u.created_at) AS business_latest_at
+  FROM usage_logs u
+  JOIN target_accounts t ON t.account_id = u.account_id
+  WHERE u.created_at >= NOW() - ($1::int * INTERVAL '1 minute')
+  GROUP BY u.account_id
 )
 SELECT t.account_id, t.account_name, t.account_status, t.schedulable,
   t.coverage_required,
   COALESCE(a.record_count, 0)::int AS record_count,
   COALESCE(a.usage_count, 0)::int AS usage_count,
   COALESCE(a.error_count, 0)::int AS error_count,
-  a.latest_record_at
+  a.latest_record_at,
+  COALESCE(b.business_sample_count, 0)::int AS business_sample_count,
+  b.business_latest_at
 FROM target_accounts t
 LEFT JOIN aggregate a ON a.account_id = t.account_id
+LEFT JOIN business_samples b ON b.account_id = t.account_id
 ORDER BY (t.coverage_required AND a.latest_record_at IS NULL), a.latest_record_at, t.account_id
 `;
 
@@ -453,7 +463,7 @@ export class IdleAccountProbeService {
     if (!Number.isInteger(windowMinutes) || windowMinutes < 1 || windowMinutes > 1440) {
       throw new Error("idle probe coverage window must be an integer from 1 to 1440 minutes");
     }
-    const scheduling = this.config.operations.upstreamSchedulingV2;
+    const scheduling = this.config.operations?.upstreamSchedulingV2;
     const scope = scopeName ? scheduling?.scopes[scopeName] : undefined;
     if (scopeName && (!scheduling?.enabled || !scope?.enabled)) {
       throw new Error(`idle probe scope is unavailable: ${scopeName}`);
@@ -479,11 +489,16 @@ export class IdleAccountProbeService {
       usageCount: Number(row.usage_count ?? 0),
       errorCount: Number(row.error_count ?? 0),
       latestRecordAt: row.latest_record_at ?? null,
+      businessSampleCount: Number(row.business_sample_count ?? 0),
+      businessLatestAt: row.business_latest_at ?? null,
+      trafficSampled: Number(row.business_sample_count ?? 0) > 0,
       covered: row.coverage_required !== true || Number(row.record_count ?? 0) > 0,
     }));
     const required = accounts.filter((account) => account.coverageRequired === true);
     const exempt = accounts.filter((account) => account.status === "error");
     const missing = required.filter((account) => account.covered !== true);
+    const actionableMissing = missing.filter((account) => account.trafficSampled !== true);
+    const trafficSampledMissing = missing.filter((account) => account.trafficSampled === true);
     return {
       ok: missing.length === 0,
       mutation: false,
@@ -494,6 +509,10 @@ export class IdleAccountProbeService {
       targetCount: required.length,
       coveredCount: required.length - missing.length,
       missingCount: missing.length,
+      trafficSampledCount: required.filter((account) => account.trafficSampled === true).length,
+      trafficSampledMissingCount: trafficSampledMissing.length,
+      actionableMissingCount: actionableMissing.length,
+      actionableMissingAccountIds: actionableMissing.map((account) => account.accountId),
       exemptErrorCount: exempt.length,
       accounts,
       missingAccountIds: missing.map((account) => account.accountId),

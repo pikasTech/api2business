@@ -153,6 +153,12 @@ const projectionColumnsSql = `
   END AS category,
   recovered,
   failover_observed,
+  (
+    LOWER(COALESCE(api_key_name, '')) LIKE 'api2business-probe-%'
+    OR LOWER(COALESCE(user_email, '')) LIKE 'api2business-probe-%@%'
+    OR LOWER(COALESCE(user_email, '')) = 'monitor-user@sub2api.platform-infra.local'
+    OR LOWER(COALESCE(group_name, '')) LIKE 'api2business-probe-%'
+  ) AS probe,
   created_at,
   ${stablePhraseSql} AS stable_phrases
 `;
@@ -161,9 +167,11 @@ const errorListSql = `
 WITH selected_errors AS MATERIALIZED (
   SELECT o.*, COALESCE(o.request_id, 'error:' || o.id::text) AS request_key
   FROM ops_error_logs o
-  WHERE COALESCE(o.status_code, 0) >= 400
+  WHERE (COALESCE(o.status_code, 0) >= 400
     OR COALESCE(o.upstream_status_code, 0) >= 400
-    OR o.error_type = 'cyber_policy'
+    OR o.error_type = 'cyber_policy')
+    AND ($2::timestamptz IS NULL OR o.created_at >= $2::timestamptz)
+    AND ($3::timestamptz IS NULL OR o.created_at < $3::timestamptz)
   ORDER BY o.created_at DESC, o.id DESC
   LIMIT $1
 ), usage_recovery_keys AS MATERIALIZED (
@@ -296,10 +304,13 @@ export function projectErrorDetailRow(row: Row, timezone: string): Row {
     category: row.category ?? "other",
     recovered: row.recovered === true,
     failoverObserved: row.failover_observed === true,
+    probe: row.probe === true,
     customerVisible:
-      (integer(row.recorded_status_code) ?? 0) >= 400 ||
-      (integer(row.upstream_status_code) ?? 0) >= 400 ||
-      String(row.error_type ?? "").toLowerCase() === "cyber_policy",
+      row.probe !== true && (
+        (integer(row.recorded_status_code) ?? 0) >= 400 ||
+        (integer(row.upstream_status_code) ?? 0) >= 400 ||
+        String(row.error_type ?? "").toLowerCase() === "cyber_policy"
+      ),
     stablePhrases: row.stable_phrases ?? {},
     responseEvidence: projectResponseEvidence(row),
     createdAt: timestamp(row.created_at, timezone),
@@ -329,6 +340,8 @@ export async function collectErrorListFromDatabase(
   reads: Sub2ApiReadClient,
   limit: number,
   priority: Sub2ApiReadPriority = "manual",
+  start: string | null = null,
+  end: string | null = null,
 ): Promise<Row> {
   if (!Number.isInteger(limit) || limit < 1 || limit > 10000) {
     throw new Error("error list limit must be an integer from 1 to 10000");
@@ -336,10 +349,10 @@ export async function collectErrorListFromDatabase(
   const startedAt = performance.now();
   const result = await query(
     reads,
-    JSON.stringify(["errors.list", limit]),
+    JSON.stringify(["errors.list", limit, start, end]),
     "errors.list",
     errorListSql,
-    [limit],
+    [limit, start, end],
     priority,
   );
   return {
@@ -355,7 +368,10 @@ export async function collectErrorListFromDatabase(
     queryCompletedAt: result.queryCompletedAt,
     deduplicated: result.deduplicated,
     cached: result.cached,
-    records: result.rows.map((row) => projectErrorDetailRow(row, config.monitor.timezone)),
+    probeRowsExcluded: result.rows.filter((row) => row.probe === true).length,
+    records: result.rows
+      .filter((row) => row.probe !== true)
+      .map((row) => projectErrorDetailRow(row, config.monitor.timezone)),
     valuesPrinted: false,
   };
 }
@@ -377,6 +393,7 @@ export async function collectErrorRequestFromDatabase(
     priority,
   );
   if (result.rows.length === 0) throw new Error(`request id not found: ${requestId}`);
+  const attempts = result.rows.map((row) => projectErrorDetailRow(row, config.monitor.timezone));
   return {
     ok: true,
     mode: "error-request-postgresql",
@@ -390,13 +407,9 @@ export async function collectErrorRequestFromDatabase(
     queryCompletedAt: result.queryCompletedAt,
     deduplicated: result.deduplicated,
     cached: result.cached,
-    attempts: result.rows.map((row) => projectErrorDetailRow(row, config.monitor.timezone)),
-    recovered: result.rows.some((row) => row.recovered === true),
-    customerVisible: result.rows.some((row) =>
-      (integer(row.recorded_status_code) ?? 0) >= 400 ||
-      (integer(row.upstream_status_code) ?? 0) >= 400 ||
-      String(row.error_type ?? "").toLowerCase() === "cyber_policy"
-    ),
+    attempts,
+    recovered: attempts.some((row) => row.recovered === true),
+    customerVisible: attempts.some((row) => row.customerVisible === true),
     valuesPrinted: false,
   };
 }

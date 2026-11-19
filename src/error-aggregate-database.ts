@@ -96,9 +96,15 @@ classified_errors AS (
       WHERE terminal_key.request_key = e.request_key
     ) AS recovered,
     CASE
+      WHEN e.account_id IS NOT NULL
+        AND LOWER(COALESCE(e.error_phase, '')) = 'routing'
+        AND COALESCE(e.upstream_status_code, 0) IN (401, 403)
+        THEN 'upstream_permission'
       WHEN COALESCE(e.is_business_limited, false)
         OR LOWER(COALESCE(e.error_phase, '')) = 'business' THEN 'business_limit'
-      WHEN LOWER(COALESCE(e.error_phase, '')) = 'client' THEN 'client_input'
+      WHEN LOWER(COALESCE(e.error_phase, '')) = 'client'
+        OR (e.status_code = 400 AND LOWER(COALESCE(e.error_type, '')) LIKE '%invalid_request%')
+        THEN 'client_input'
       WHEN e.status_code = 429 OR e.upstream_status_code = 429 THEN 'rate_limit'
       WHEN e.status_code IN (502, 503, 504, 524)
         OR e.upstream_status_code IN (502, 503, 504, 524)

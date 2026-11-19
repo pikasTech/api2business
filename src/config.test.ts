@@ -46,8 +46,18 @@ describe("upstream scheduling v2 platform validation", () => {
 
   test("rejects an unsupported platform identifier", () => {
     expect(() => loadExampleWithOpencode("opencode")).toThrow(
-      "operations.upstreamSchedulingV2.scopes.opencode.platform must be openai, anthropic, grok, deepseek, opencode_go, or command_code",
+      "operations.upstreamSchedulingV2.scopes.opencode.platform must be openai, anthropic, grok, deepseek, opencode_go, command_code, or gemini",
     );
+  });
+
+  test("accepts a Gemini scope and loads its failover template", () => {
+    const config = loadConfig(join(configDir, "api2business.example.yaml"));
+    expect(config.operations.upstreamSchedulingV2?.scopes.gemini).toMatchObject({
+      platform: "gemini",
+      eligibleGroupIds: [665],
+    });
+    expect(config.operations.upstreamManagement.failoverTemplates.gemini.platform).toBe("gemini");
+    expect(config.sub2api.geminiPriorityPlan?.platform).toBe("gemini");
   });
 });
 

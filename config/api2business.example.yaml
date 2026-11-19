@@ -205,6 +205,17 @@ sub2api:
     ttftFullScoreMs: 5000
     ttftZeroScoreMs: 60000
     ttftPriorScore: 25
+  geminiScorePolicy:
+    reliabilityWeight: 60
+    failoverWeight: 15
+    latencyWeight: 25
+    baselineWeight: 0
+    failureZeroScoreRate: 0.2
+    failureBurstCallLimit: 100
+    failoverZeroScoreRate: 0.2
+    ttftFullScoreMs: 5000
+    ttftZeroScoreMs: 60000
+    ttftPriorScore: 25
   scoreSamplePolicy:
     retentionHours: 8
     decayBucketSize: 100
@@ -219,6 +230,7 @@ sub2api:
       anthropic: [ claude-sonnet-5-5 ]
       grok: [ grok-4.5 ]
       deepseek: [ deepseek-flash ]
+      gemini: [ gemini-2.5-pro, gemini-2.5-flash ]
     reasoningEffort: low
     candidateLimit: 10
     concurrency: 1000
@@ -411,6 +423,50 @@ sub2api:
         - 用户额度不足
         - 预扣费额度失败
         - 欠费
+  geminiPriorityPlan:
+    platform: gemini
+    eligibleGroupIds: [ 665 ]
+    requiredConfidence: high
+    requireCurrentAvailable: true
+    reliabilityWeight: 65
+    latencyWeight: 30
+    costWeight: 0
+    evidenceWeight: 0
+    evidenceTargetAttempts: 50
+    evidenceTargetFirstTokenSamples: 20
+    explorationWeight: 0
+    explorationTargetAttempts: 50
+    explorationQualityPrior: 0
+    balanceWeight: 5
+    referenceScore: 80
+    pointsPerScore: 8
+    minimumChange: 5
+    normalizationTopK: 20
+    forceNormalizedTopK: true
+    minimumPriorityUniformity: 0.25
+    minimumPriority: 100
+    maximumPriority: 300
+    fixedPriorities: {}
+    reservePolicies: {}
+    procurementAdvice:
+      enabled: false
+      minimumQualityScore: 80
+      valueWeight: 80
+      redundancyWeight: 20
+      recommendationLimit: 3
+      statusAlertLimit: 20
+      maximumRecommendationsPerSupplier: 1
+      minimumSupplierCount: 4
+      maximumSupplierShare: 0.4
+      billingErrorPatterns:
+        - insufficient account balance
+        - insufficient balance
+        - payment required
+        - account balance depleted
+        - 余额不足
+        - 用户额度不足
+        - 预扣费额度失败
+        - 欠费
   adminCredentials:
     sourceRef: secrets/sub2api.env
     emailKey: ADMIN_EMAIL
@@ -537,6 +593,19 @@ operations:
           idleProbe: true
           upstreamWrite: false
           modelSyncAutomation: false
+      gemini:
+        enabled: true
+        platform: gemini
+        eligibleGroupIds: [ 665 ]
+        idleProbeIntervalSeconds: 900
+        features:
+          scoreRead: true
+          planRead: true
+          planWrite: false
+          priorityAutomation: true
+          idleProbe: true
+          upstreamWrite: false
+          modelSyncAutomation: true
   databaseUrlEnv: API2BUSINESS_DATABASE_URL
   databasePrepareStatements: true
   ledgerYamlPath: /var/lib/api2business/sub2api-pool.yaml
@@ -593,6 +662,7 @@ operations:
       grok: config/failover-templates/grok.yaml
       deepseek: config/failover-templates/deepseek.yaml
       opencode: config/failover-templates/opencode.yaml
+      gemini: config/failover-templates/gemini.yaml
     externalCutoff:
       enabled: true
       dryRun: true

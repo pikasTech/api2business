@@ -20,6 +20,10 @@ test("error aggregate is one bounded database query with recovered request detec
   expect(errorAggregateQuery).not.toContain("o.*");
   expect(errorAggregateQuery).toContain("e.status_code IN (502, 503, 504, 524)");
   expect(errorAggregateQuery).toContain("e.upstream_status_code IN (502, 503, 504, 524)");
+  expect(errorAggregateQuery).toContain("THEN 'upstream_permission'");
+  expect(errorAggregateQuery).toContain("LOWER(COALESCE(e.error_phase, '')) = 'routing'");
+  expect(errorAggregateQuery).toContain("e.status_code = 400");
+  expect(errorAggregateQuery).toContain("invalid_request");
   expect(errorAggregateQuery).toContain("AND (NOT (COALESCE(o.status_code, o.upstream_status_code, 0) BETWEEN 200 AND 399)");
   expect(errorAggregateQuery).toContain("OR COALESCE(o.upstream_status_code, 0) >= 400");
   expect(errorAggregateQuery).toContain("OR (o.error_phase='request' AND o.error_type='cyber_policy')");

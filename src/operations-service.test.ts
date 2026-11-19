@@ -525,7 +525,7 @@ test("pool quality keeps successful scopes when one platform times out", async (
   } as unknown as Sub2ApiReadClient;
   const service = new OperationsService(config, store, reads);
   const partial = await service.samplePoolQuality();
-  expect(saved).toEqual(["claude", "grok", "deepseek"]);
+  expect(saved).toEqual(["claude", "grok", "deepseek", "gemini"]);
   expect(partial.ok).toBe(false);
   expect(partial.failures).toEqual([{
     platform: "codex",

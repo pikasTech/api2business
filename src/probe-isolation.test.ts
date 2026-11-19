@@ -250,6 +250,39 @@ test("DeepSeek probe uses Chat Completions and the configured probe model", asyn
   }
 });
 
+test("Gemini probe uses Chat Completions and preserves the Gemini platform binding", async () => {
+  const { state, service } = fixture();
+  state.account = { id: 42, platform: "gemini", type: "apikey", group_ids: [665] };
+  const originalFetch = globalThis.fetch;
+  let requestUrl = "";
+  let requestBody = "";
+  let result: Record<string, unknown> = {};
+  globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+    requestUrl = String(input);
+    requestBody = String(init?.body ?? "");
+    const prompt = finalChatQuestion(JSON.parse(requestBody));
+    return new Response(chatMathStream(answerFromPrompt(prompt)), { status: 200, headers: { "content-type": "text/event-stream" } });
+  }) as unknown as typeof fetch;
+  try {
+    await service.ensure(42, { platform: "gemini", eligibleGroupIds: [665], bindingGroupIds: [] });
+    result = await service.probe(42, "gemini-2.5-pro", 1000);
+    expect(requestUrl).toBe("https://gateway.example.com/v1/chat/completions");
+    expect(JSON.parse(requestBody)).toMatchObject({
+      model: "gemini-2.5-pro",
+      messages: [
+        { role: "system", content: MATH_PROBE_SYSTEM_PROMPT },
+        ...PROBE_CACHE_HISTORY,
+        { role: "user", content: expect.stringMatching(/^\d+ \+ \d+$/u) },
+      ],
+      max_tokens: 256,
+      stream: true,
+    });
+    expect(result).toMatchObject({ answerClassification: "correct", qualityOk: true, terminalStatus: "completed" });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("probe isolation namespaces a platform after a stale cross-platform group collision", async () => {
   const { state, service } = fixture();
   state.account = { id: 42, platform: "grok", type: "apikey", group_ids: [62] };

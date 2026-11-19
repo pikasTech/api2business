@@ -1,0 +1,33 @@
+# r89 巡检结论（北京时间 2026-11-19 07:06–09:06）
+
+- 窗口：`2026-11-18T23:06:01Z`–`2026-11-19T01:06:01Z`，7200 秒。
+- Sub2API（排除 Luna，样本 4）：4,587 请求 / 11 失败 / 99.76%，流式 4,509，TTFT P95 11,511ms；SLO 达标。
+- Api2Business：317 请求 / 0 失败 / P95 825ms，覆盖 7,200/7,200 秒。
+- 错误聚合：215 客户可见请求 / 211 客户可见 / 4 恢复；202 条下游 Key 额度耗尽已排除；9 条上游失败（7×502、2×429），2 条切号恢复。
+- 502：08:49–08:56，1549 lumibest、1554/1592 opencode，Cloudflare IPv6 链路抖动，已自恢复。
+- 429-1：09:01:53 `DeepSeek-V4.1-Flash-1017` 组 191，9 个 OpenCode 账号月额度 0%，`account_select_failed`。
+- 429-2：09:00:28 487 banliapi `gateway_queue_full`，响应已提交。
+- 修复 1：1600、1592 补 `DeepSeek-V4.1-Flash-1017` → `deepseek-v4.1-flash`；1600 复验期承接 12 条。
+- 修复 2：CommandCode 1580/1581/1583/1584 补 `DeepSeek-V4.1-Flash-1017` → `deepseek/deepseek-v4.1-flash`；均 persisted、mappingKeyCount 99、active/schedulable；1580/1581 复验期承接 2/26 条。
+- 复验 1（01:12:54–01:22:54Z）：418/1/99.76%/P95 7,757ms；1 条为 unknown 平台非流式业务限额，非上游失败。
+- 复验 2（01:24–01:34Z）：900/5/99.44%/P95 6,069ms；无 `account_select_failed`，5 条为独立上游问题。
+- 复验 3（01:34–01:44Z）：714/3/99.58%/P95 5,373ms；3 条为 1535 残留 post-commit 502。
+- 1535（laaai.cc pro）：01:32:14–01:35:28Z 共 6 条 502，`response.failed`/`Upstream request failed`，错误响应已写出；01:35:28Z 后至 01:47Z 无新增，未暂停，交调度器降权。
+- 27：09:25:03 单条 post-commit 502；1600：09:25:56 单条 `failed to parse event` 内部 502；均无复发。
+- 四作用域：Codex 95.8/97.1 A、Claude 98.8/97.1 A、Grok 96.2/94.7 A、DeepSeek 99.3/99.7 A；均 ready/complete/applied，评分查询 98–299ms。
+- 探活覆盖：Codex 51/52（缺 1534，actionable 0）、Claude 20/20、Grok 8/8、DeepSeek 3/3。
+- 探活成本 `within`：评估日 3.5308 元，覆盖 99.6688%；七日 65.4424 元，中位数 13.0165 元。
+- 成本：665,879 条、已知 9,160.3748 元、覆盖 99.9931%；61 钱包（31 fresh / 20 stale / 10 unknown，冲突 0）。
+- 消耗停滞：169 账号，healthy 4、stalled 29、watch 120、demand-insufficient 14、excluded 2、强触发 20（仅供关注）。
+- 1514：仅探活 Key 470 的 7 条请求，自然用户 0，无错误，模板无漂移。
+- OpenCode Go：13 可探测 / 10 停调度；月额度 11 低（9 个 0%）。
+- CommandCode：6 账号 / 5 可调度；月额度 6 unknown；可补充供给，尚未证明无缝替代。
+- QQ：本窗 0 消息，无新增可核验候选。
+- 工具改进：`upstreams model-alias --help` 改为操作级帮助，补单测；`bun test` 11/11、`tsc --noEmit`、`deploy:validate` 通过。
+- 事故：https://github.com/pikasTech/api2business/issues/4 （已关闭；复验评论 6997114456，关闭评论 6997256664）。
+- 干净窗口（01:44–01:52Z）：610 请求 / 0 失败 / 100%，TTFT P95 4,374ms；Api2Business 22/0/P95 1,387ms；01:52–01:53:10Z 抽查 0 条客户可见上游失败。
+- 邮件 1（两小时巡检）：`email_d605909388814f029462c4a0358eba43`，`receiveVerified=true`，Message-ID `<179505279926.2614661.4431514520458293412@qq.com>`。
+- 邮件 2（事故完成）：`email_2c49727a0d384a23aa4421bfe3b7ad18`，`receiveVerified=true`，Message-ID `<179505326546.2617747.9450825581037230510@qq.com>`。
+- 完整报告：https://github.com/pikasTech/unidesk/issues/7791
+- 事故判定：09:00–09:02 的 429 别名缺口已消除；1535 的 6 条 post-commit 502 为瞬时上游质量事件，17 分钟以上无新增；27/1600 单发 502 无复发；1600 的 `failed to parse event` 记录为残余风险。
+- 下一轮续接：复核 1535 是否再出现连续 post-commit 502；1514 继续待自然承流。
