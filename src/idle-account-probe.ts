@@ -172,6 +172,7 @@ export interface IdleProbeCandidate {
   availableSampleCount: number;
   groupIds: number[];
   probeModel?: string | null;
+  probeModels?: string[];
   probeCacheMode?: MathProbeCacheMode;
   probeCacheKnownSamples?: number;
   probeCacheHitSamples?: number;
@@ -201,21 +202,34 @@ export function selectProbeCacheMode(
 
 const defaultProbeModels = ["gpt-6.1-sol", "gpt-5.6-terra", "gpt-5.6-sol"] as const;
 
+export function selectIdleProbeModels(
+  modelNames: unknown,
+  fallbackModel: string,
+  preferredModels: readonly string[] = defaultProbeModels,
+): string[] {
+  const names = Array.isArray(modelNames)
+    ? modelNames.map((value) => String(value).trim()).filter(Boolean)
+    : [];
+  if (names.length === 0) return [fallbackModel];
+  const normalized = new Map(names.map((name) => [name.toLowerCase(), name]));
+  const matches = preferredModels
+    .map((model) => normalized.get(model.toLowerCase()))
+    .filter((model): model is string => model !== undefined);
+  return matches.length > 0 ? [...new Set(matches)] : [fallbackModel];
+}
+
 export function selectIdleProbeModel(
   modelNames: unknown,
   fallbackModel: string,
   preferredModels: readonly string[] = defaultProbeModels,
 ): string | null {
-  const names = Array.isArray(modelNames)
-    ? modelNames.map((value) => String(value).trim()).filter(Boolean)
-    : [];
-  if (names.length === 0) return fallbackModel;
-  const normalized = new Map(names.map((name) => [name.toLowerCase(), name]));
-  return preferredModels
-    .map((model) => normalized.get(model.toLowerCase()))
-    .find((model): model is string => model !== undefined)
-    ?? names[0]
-    ?? fallbackModel;
+  return selectIdleProbeModels(modelNames, fallbackModel, preferredModels)[0] ?? fallbackModel;
+}
+
+function nextProbeModelMayHelp(response: Record<string, unknown>): boolean {
+  const status = Number(response.httpStatus);
+  if (status === 400 || status === 404) return true;
+  return status >= 200 && status < 300 && response.answerClassification === "empty";
 }
 
 function numericIds(value: unknown): number[] {
@@ -376,32 +390,36 @@ export class IdleAccountProbeService {
     });
     const candidates = result.rows
       .filter((row) => explicit.length > 0 || row.account_status === "active" && row.schedulable === true)
-      .map((row) => ({
-      accountId: Number(row.account_id),
-      accountName: String(row.account_name),
-      platform: String(row.platform),
-      priority: Number(row.priority),
-      status: String(row.account_status ?? "unknown"),
-      schedulable: row.schedulable === true,
-      hadRuntimeBlock: row.rate_limit_reset_at != null
-        || row.overload_until != null
-        || row.temp_unschedulable_until != null,
-      availableSampleCount: Number(row.available_sample_count ?? 0),
-      groupIds: numericIds(row.group_ids),
-      probeCacheKnownSamples: Number(row.cache_known_samples ?? 0),
-      probeCacheHitSamples: Number(row.cache_hit_samples ?? 0),
-      probeCachePlatformHitSamples: Number(row.platform_cache_hit_samples ?? 0),
-      probeCacheMode: selectProbeCacheMode(
-        Number(row.cache_known_samples ?? 0),
-        Number(row.cache_hit_samples ?? 0),
-        Number(row.platform_cache_hit_samples ?? 0),
-      ),
-        probeModel: selectIdleProbeModel(
+      .map((row) => {
+        const probeModels = selectIdleProbeModels(
           row.model_mapping_keys,
           policy.platformModels?.[String(row.platform)]?.[0] ?? policy.model,
           policy.platformModels?.[String(row.platform)] ?? [],
-        ),
-      } satisfies IdleProbeCandidate));
+        );
+        return {
+          accountId: Number(row.account_id),
+          accountName: String(row.account_name),
+          platform: String(row.platform),
+          priority: Number(row.priority),
+          status: String(row.account_status ?? "unknown"),
+          schedulable: row.schedulable === true,
+          hadRuntimeBlock: row.rate_limit_reset_at != null
+            || row.overload_until != null
+            || row.temp_unschedulable_until != null,
+          availableSampleCount: Number(row.available_sample_count ?? 0),
+          groupIds: numericIds(row.group_ids),
+          probeCacheKnownSamples: Number(row.cache_known_samples ?? 0),
+          probeCacheHitSamples: Number(row.cache_hit_samples ?? 0),
+          probeCachePlatformHitSamples: Number(row.platform_cache_hit_samples ?? 0),
+          probeCacheMode: selectProbeCacheMode(
+            Number(row.cache_known_samples ?? 0),
+            Number(row.cache_hit_samples ?? 0),
+            Number(row.platform_cache_hit_samples ?? 0),
+          ),
+          probeModel: probeModels[0] ?? null,
+          probeModels,
+        } satisfies IdleProbeCandidate;
+      });
     const includeRollingUsage = priority !== "automatic";
     const rolling24Hours = includeRollingUsage ? await this.rollingUsage(priority) : null;
     return {
@@ -589,7 +607,6 @@ export class IdleAccountProbeService {
     const repairedAccountIds = new Set<number>();
     const repairFailures: Array<{ accountId: number; error: string }> = [];
     const unreadyAccountIds = new Set<number>();
-    const modelUnavailableAccountIds = new Set<number>();
     let repairBudget = policy.provisionCandidateLimit;
     let monitorBalance: ProbeMonitorBalance | null = null;
     let monitorBalanceError: string | null = null;
@@ -644,40 +661,66 @@ export class IdleAccountProbeService {
         }
         // 探活只执行计划中的 active + schedulable 账号，不改变账号运行状态。
         const settled = await Promise.all(candidates.map(async (candidate) => {
-            try {
-              const jitterMs = idleProbeRequestJitterMs(policy.requestJitterMinMs, policy.requestJitterMaxMs);
-              await Bun.sleep(jitterMs);
-              const response = await this.isolation!.probe(
+          const probeModels = candidate.probeModels?.length
+            ? candidate.probeModels
+            : [candidate.probeModel ?? defaultProbeModel];
+          let model = probeModels[0] ?? defaultProbeModel;
+          let response: Record<string, unknown> | null = null;
+          const modelAttempts: Array<Record<string, unknown>> = [];
+          try {
+            const jitterMs = idleProbeRequestJitterMs(policy.requestJitterMinMs, policy.requestJitterMaxMs);
+            await Bun.sleep(jitterMs);
+            for (const [index, attemptModel] of probeModels.entries()) {
+              model = attemptModel;
+              const attemptResponse = await this.isolation!.probe(
                 candidate.accountId,
-                candidate.probeModel ?? policy.model,
+                attemptModel,
                 policy.accountTimeoutMs,
                 policy.reasoningEffort,
                 candidate.probeCacheMode ?? "full",
               );
-              return {
-                accountId: candidate.accountId,
-                accountName: candidate.accountName,
-                model: candidate.probeModel ?? policy.model,
-                recoveredBeforeProbe: true,
-                jitterMs,
-                previousRuntimeState: {
-                  status: candidate.status,
-                  schedulable: candidate.schedulable,
-                  hadRuntimeBlock: candidate.hadRuntimeBlock,
-                },
-                ok: response.ordinaryLogRecorded === true && response.qualityOk === true,
-                response,
-              };
-            } catch (error) {
-              return {
-                accountId: candidate.accountId,
-                accountName: candidate.accountName,
-                model: candidate.probeModel ?? policy.model,
-                recoveredBeforeProbe: false,
-                ok: false,
-                error: error instanceof Error ? error.message : String(error),
-              };
+              response = attemptResponse;
+              const attemptOk = attemptResponse.ordinaryLogRecorded === true && attemptResponse.qualityOk === true;
+              const status = Number(attemptResponse.httpStatus);
+              modelAttempts.push({
+                attempt: index + 1,
+                model: attemptModel,
+                ok: attemptOk,
+                httpStatus: Number.isFinite(status) ? status : null,
+                classification: typeof attemptResponse.classification === "string" ? attemptResponse.classification : null,
+                answerClassification: typeof attemptResponse.answerClassification === "string"
+                  ? attemptResponse.answerClassification : null,
+                errorMarker: typeof attemptResponse.errorMarker === "string" ? attemptResponse.errorMarker : null,
+              });
+              if (attemptOk || index === probeModels.length - 1
+                || !nextProbeModelMayHelp(attemptResponse)) break;
             }
+            return {
+              accountId: candidate.accountId,
+              accountName: candidate.accountName,
+              model,
+              modelAttempts,
+              recoveredBeforeProbe: true,
+              jitterMs,
+              previousRuntimeState: {
+                status: candidate.status,
+                schedulable: candidate.schedulable,
+                hadRuntimeBlock: candidate.hadRuntimeBlock,
+              },
+              ok: response?.ordinaryLogRecorded === true && response?.qualityOk === true,
+              response,
+            };
+          } catch (error) {
+            return {
+              accountId: candidate.accountId,
+              accountName: candidate.accountName,
+              model,
+              modelAttempts,
+              recoveredBeforeProbe: false,
+              ok: false,
+              error: error instanceof Error ? error.message : String(error),
+            };
+          }
         }));
         results.push(...settled.map((result) => ({ round, ...result })));
       }
@@ -701,7 +744,6 @@ export class IdleAccountProbeService {
         repairedAccountIds: [...repairedAccountIds].sort((left, right) => left - right),
         repairFailures,
         unreadyAccountIds: [...unreadyAccountIds].sort((left, right) => left - right),
-        modelUnavailableAccountIds: [...modelUnavailableAccountIds].sort((left, right) => left - right),
         monitorBalance,
         monitorBalanceError,
         probeConcurrency: "all-ready-candidates",

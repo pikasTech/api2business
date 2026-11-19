@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { AppConfig } from "./config";
-import { IdleAccountProbeService, idleProbeCandidatesSql, idleProbeCoverageSql, idleProbeRequestJitterMs, idleProbeRollingUsageSql, PROBE_COMPACT_CACHE_MIN_KNOWN_SAMPLES, selectIdleProbeModel, selectProbeCacheMode } from "./idle-account-probe";
+import { IdleAccountProbeService, idleProbeCandidatesSql, idleProbeCoverageSql, idleProbeRequestJitterMs, idleProbeRollingUsageSql, PROBE_COMPACT_CACHE_MIN_KNOWN_SAMPLES, selectIdleProbeModel, selectIdleProbeModels, selectProbeCacheMode } from "./idle-account-probe";
 import type { Sub2ApiReadClient } from "./sub2api-read-executor";
 
 const config = {
@@ -58,7 +58,7 @@ test("idle probe selects only normal schedulable API-key accounts", async () => 
   expect(plan.candidates).toEqual([{
     accountId: 369, accountName: "upstream plus 0.05", platform: "openai", priority: 300,
     status: "active", schedulable: true, hadRuntimeBlock: false, availableSampleCount: 4,
-    groupIds: [2, 3, 51], probeModel: "gpt-6.1-sol",
+    groupIds: [2, 3, 51], probeModel: "gpt-6.1-sol", probeModels: ["gpt-6.1-sol"],
     probeCacheKnownSamples: 0, probeCacheHitSamples: 0, probeCachePlatformHitSamples: 0,
     probeCacheMode: "compact",
   }]);
@@ -68,20 +68,38 @@ test("idle probe prefers gpt-6.1-sol, then Terra, from the account model whiteli
   expect(selectIdleProbeModel(["gpt-5.6-terra", "gpt-6.1-sol"], "gpt-6.1-sol")).toBe("gpt-6.1-sol");
   expect(selectIdleProbeModel(["gpt-5.6-sol", "gpt-5.5"], "gpt-5.6-terra")).toBe("gpt-5.6-sol");
   expect(selectIdleProbeModel(["gpt-5.6-terra", "gpt-5.6-sol"], "gpt-5.6-terra")).toBe("gpt-5.6-terra");
-  expect(selectIdleProbeModel(["gpt-5.5"], "gpt-5.6-terra")).toBe("gpt-5.5");
+  expect(selectIdleProbeModel(["gpt-5.5"], "gpt-5.6-terra")).toBe("gpt-5.6-terra");
   expect(selectIdleProbeModel([], "gpt-5.6-terra")).toBe("gpt-5.6-terra");
+});
+
+test("idle probe falls back to the platform whitelist instead of an arbitrary JSONB key", () => {
+  const preferred = ["gpt-6.1-sol", "gpt-5.6-terra", "gpt-5.6-sol"];
+  expect(selectIdleProbeModel(["zzz-custom", "aaa-custom"], "gpt-6.1-sol", preferred)).toBe("gpt-6.1-sol");
+  expect(selectIdleProbeModel(["gpt-5.6-terra", "gpt-6.1-sol"], "gpt-6.1-sol", preferred)).toBe("gpt-6.1-sol");
+  expect(selectIdleProbeModel(["G1-CUSTOM", "gpt-5.6-sol"], "gpt-6.1-sol", preferred)).toBe("gpt-5.6-sol");
+});
+
+test("idle probe keeps the full whitelist order for bounded model fallback", () => {
+  const preferred = ["gemini-4-argon", "gemini-4-hydrogen", "gemini-3.8-flash"];
+  expect(selectIdleProbeModels(
+    ["gemini-3.8-flash", "gemini-4-hydrogen", "gemini-4-argon"],
+    "gemini-4-argon",
+    preferred,
+  )).toEqual(["gemini-4-argon", "gemini-4-hydrogen", "gemini-3.8-flash"]);
+  expect(selectIdleProbeModels(["legacy-model"], "gemini-4-argon", preferred)).toEqual(["gemini-4-argon"]);
+  expect(selectIdleProbeModels([], "gemini-4-argon", preferred)).toEqual(["gemini-4-argon"]);
 });
 
 test("idle probe prefers the newest Gemini alias present in the account mapping", () => {
   const preferred = [
-    "gemini-4-hydrogen", "gemini-4-argon", "gemini-3.8-flash",
+    "gemini-4-argon", "gemini-4-hydrogen", "gemini-3.8-flash",
     "gemini-3.1-pro-preview", "gemini-3-pro-preview", "gemini-2.5-pro", "gemini-2.5-flash",
   ];
   expect(selectIdleProbeModel(
     ["gemini-3.8-flash", "gemini-4-argon", "gemini-4-hydrogen"],
     "gemini-2.5-pro",
     preferred,
-  )).toBe("gemini-4-hydrogen");
+  )).toBe("gemini-4-argon");
   expect(selectIdleProbeModel(
     ["gemini-2.5-pro", "gemini-3.1-pro-preview", "gemini-4-argon"],
     "gemini-2.5-pro",
@@ -92,6 +110,11 @@ test("idle probe prefers the newest Gemini alias present in the account mapping"
     "gemini-2.5-pro",
     preferred,
   )).toBe("gemini-3.1-pro-preview");
+  expect(selectIdleProbeModel(
+    ["legacy-gemini"],
+    "gemini-4-argon",
+    preferred,
+  )).toBe("gemini-4-argon");
 });
 
 test("idle probe reconciliation repairs a persisted private group removed by a bulk account update", async () => {
@@ -312,6 +335,78 @@ test("idle probe keeps concurrent rounds independent across scheduling scopes", 
   expect(await second).toMatchObject({ skipped: false, attempted: 1, succeeded: 1 });
   release();
   expect(await first).toMatchObject({ skipped: false, attempted: 1, succeeded: 1 });
+});
+
+test("idle probe falls back to the next mapped model only for model-scoped failures", async () => {
+  const modelConfig = {
+    ...config,
+    sub2api: {
+      ...config.sub2api,
+      idleProbe: {
+        ...config.sub2api.idleProbe,
+        platformModels: { openai: ["gpt-6.1-sol", "gpt-5.6-terra"] },
+      },
+    },
+  } as unknown as AppConfig;
+  const attempts: string[] = [];
+  const isolation = {
+    get: () => ({ accountId: 369, groupId: 51, keyCreated: false }),
+    probe: async (_accountId: number, model: string) => {
+      attempts.push(model);
+      return model === "gpt-6.1-sol"
+        ? { classification: "alive", answerClassification: "empty", httpStatus: 200,
+            ordinaryLogRecorded: true, qualityOk: false }
+        : { classification: "alive", answerClassification: "correct", httpStatus: 200,
+            ordinaryLogRecorded: true, qualityOk: true };
+    },
+  };
+  const service = new IdleAccountProbeService(modelConfig, reads([{
+    account_id: 369, account_name: "upstream plus 0.05", platform: "openai", priority: 300,
+    account_status: "active", schedulable: true, group_ids: [51],
+    model_mapping_keys: ["gpt-5.6-terra", "gpt-6.1-sol"],
+  }]), {} as never, isolation as never);
+
+  const output = await service.run([369], 1);
+  expect(output).toMatchObject({ ok: true, attempted: 1, succeeded: 1, failed: 0 });
+  expect(attempts).toEqual(["gpt-6.1-sol", "gpt-5.6-terra"]);
+  expect((output.results as Array<Record<string, unknown>>)[0]).toMatchObject({
+    model: "gpt-5.6-terra",
+    ok: true,
+    modelAttempts: [
+      { attempt: 1, model: "gpt-6.1-sol", ok: false, httpStatus: 200, answerClassification: "empty" },
+      { attempt: 2, model: "gpt-5.6-terra", ok: true, httpStatus: 200, answerClassification: "correct" },
+    ],
+  });
+});
+
+test("idle probe does not burn alternate models on rate limits or upstream failures", async () => {
+  const modelConfig = {
+    ...config,
+    sub2api: {
+      ...config.sub2api,
+      idleProbe: {
+        ...config.sub2api.idleProbe,
+        platformModels: { openai: ["gpt-6.1-sol", "gpt-5.6-terra"] },
+      },
+    },
+  } as unknown as AppConfig;
+  const attempts: string[] = [];
+  const isolation = {
+    get: () => ({ accountId: 369, groupId: 51, keyCreated: false }),
+    probe: async (_accountId: number, model: string) => {
+      attempts.push(model);
+      return { classification: "rate-limited", answerClassification: "not_assessed", httpStatus: 429,
+        ordinaryLogRecorded: true, qualityOk: false };
+    },
+  };
+  const service = new IdleAccountProbeService(modelConfig, reads([{
+    account_id: 369, account_name: "upstream plus 0.05", platform: "openai", priority: 300,
+    account_status: "active", schedulable: true, group_ids: [51],
+    model_mapping_keys: ["gpt-5.6-terra", "gpt-6.1-sol"],
+  }]), {} as never, isolation as never);
+
+  expect(await service.run([369], 1)).toMatchObject({ ok: false, attempted: 1, succeeded: 0, failed: 1 });
+  expect(attempts).toEqual(["gpt-6.1-sol"]);
 });
 
 test("idle probe reconciles the monitor wallet before a round", async () => {

@@ -965,7 +965,9 @@ async function remote(parsed: Parsed, config: ReturnType<typeof loadConfig>, tar
     if (!parsed.accounts) throw new Error("upstreams models sync requires --accounts");
     const accountIds = parseAccountIdSelector(parsed.accounts);
     if (!parsed.confirm) return { ok: true, mutation: false, action: "upstream-models-sync", accountIds, hint: "add --confirm to execute" };
-    return await client.upstreamModelsSync(accountIds);
+    const result = await client.upstreamModelsSync(accountIds);
+    if (result.ok === false) process.exitCode = 1;
+    return result;
   }
   if (group === "upstreams" && action === "model-alias") {
     if (!parsed.id || !parsed.model || !parsed.upstreamModel) throw new Error("upstreams model-alias requires --id, --model, and --upstream-model");

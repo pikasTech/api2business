@@ -451,6 +451,16 @@ test("keeps Codex and Claude templates as separate platform files", () => {
   expect(opencode.rules).toHaveLength(5);
   expect(opencode.rules.some((rule) => rule.error_code === 403 && rule.keywords.includes("Workspace access denied"))).toBe(true);
   expect(opencode.rules.some((rule) => rule.error_code === 429 && rule.keywords.includes("Go usage limit exceeded"))).toBe(true);
+  const gemini = parsed.operations.upstreamManagement.failoverTemplates.gemini;
+  expect(gemini.platform).toBe("gemini");
+  const matchGemini = (status: number, body: unknown) => gemini.rules.find((rule) =>
+    rule.error_code === status && rule.keywords.some((keyword) =>
+      JSON.stringify(body).toLowerCase().includes(keyword.toLowerCase())));
+  expect(matchGemini(404, { error: { message: "Model gemini-4-argon is not available" } })?.duration_minutes).toBe(3);
+  expect(matchGemini(429, { error: { status: "RESOURCE_EXHAUSTED", message: "Too many requests. Please retry later." } })?.duration_minutes).toBe(3);
+  expect(matchGemini(429, "RESOURCE_EXHAUSTED")?.duration_minutes).toBe(3);
+  expect(matchGemini(502, "error code: 502")?.duration_minutes).toBe(3);
+  expect(matchGemini(503, { error: { message: "No available Gemini accounts: no available accounts" } })?.duration_minutes).toBe(3);
   expect(parsed.operations.upstreamManagement.templateFiles).toEqual({
     codex: "config/failover-templates/codex.yaml",
     claude: "config/failover-templates/claude.yaml",

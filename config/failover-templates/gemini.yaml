@@ -41,6 +41,7 @@ rules:
   - model not found
   - not supported by any configured account
   - no available channel for model
+  - is not available
   durationMinutes: 3
   description: Gemini 上游明确返回模型或渠道不可用时短暂切号
 - errorCode: 429
@@ -49,6 +50,7 @@ rules:
   - rate_limit_exceeded
   - too many requests
   - resource_exhausted
+  - resource exhausted
   - All available accounts are currently rate-limited. Please retry later.
   durationMinutes: 3
   description: Gemini 上游限流时切号并短暂冷却
@@ -64,6 +66,7 @@ rules:
   - upstream request failed
   - upstream service temporarily unavailable
   - stream disconnected
+  - 'error code: 502'
   durationMinutes: 3
   description: Gemini 上游网关或流式响应故障
 - errorCode: 503
@@ -71,6 +74,7 @@ rules:
   - service unavailable
   - temporarily unavailable
   - overloaded
+  - no available accounts
   durationMinutes: 3
   description: Gemini 上游暂时不可用或过载
 - errorCode: 504

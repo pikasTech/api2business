@@ -116,6 +116,37 @@ test("failed upstream model discovery preserves the last available model mapping
   expect(mapping).toEqual({ "gpt-6.1-sol": "gpt-6.1-sol" });
 });
 
+test("continues a multi-account model sync after one account fails", async () => {
+  const mappings: Record<number, Record<string, string>> = {};
+  const client = {
+    getAccount: async (id: number) => ({
+      id,
+      platform: "gemini",
+      credentials: { base_url: "https://example.test", model_mapping: { ...(mappings[id] ?? {}) } },
+    }),
+    mutate: async (_method: string, path: string, body?: Record<string, unknown>) => {
+      const accountId = Number(path.match(/accounts\/(\d+)\//u)?.[1] ?? (body?.account_ids as number[] | undefined)?.[0]);
+      if (path.endsWith("/models/sync-upstream")) {
+        if (accountId === 2) throw new Error("upstream model list HTTP 503 sk-should-not-leak");
+        return { models: ["gemini-4-argon"] };
+      }
+      mappings[accountId] = ((body?.credentials as Record<string, unknown>).model_mapping ?? {}) as Record<string, string>;
+      return { success: 1, failed: 0, success_ids: [accountId] };
+    },
+  } as unknown as Sub2ApiClient;
+
+  const output = await new Sub2ApiRuntimeService(client)
+    .syncUpstreamModels([1, 2], 120000, undefined, { continueOnError: true });
+
+  expect(output.ok).toBe(false);
+  expect(output.results).toEqual([expect.objectContaining({ accountId: 1, persisted: true })]);
+  expect(output.failures).toEqual([{
+    accountId: 2,
+    ok: false,
+    error: "upstream model list HTTP 503 [REDACTED]",
+  }]);
+});
+
 test("syncs DeepSeek aliases under the canonical model key", async () => {
   const calls: Array<{ path: string; body?: Record<string, unknown> }> = [];
   let mapping: Record<string, string> = {

@@ -133,13 +133,15 @@ export class Sub2ApiRuntimeService {
     accountIds: number[],
     timeoutMs?: number,
     modelSyncPolicy?: ModelSyncPolicy,
+    options: { continueOnError?: boolean } = {},
   ): Promise<Record<string, unknown>> {
     const ids = [...new Set(accountIds)].sort((left, right) => left - right);
     if (ids.length === 0 || ids.some((id) => !Number.isSafeInteger(id) || id < 1)) {
       throw new Error("model sync requires stable positive account IDs");
     }
     const results: Array<Record<string, unknown>> = [];
-    for (const accountId of ids) {
+    const failures: Array<Record<string, unknown>> = [];
+    const syncAccount = async (accountId: number): Promise<void> => {
       const before = await this.client.getAccount(accountId, timeoutMs);
       const beforeCredentials = record(before?.credentials) ?? {};
       const beforeMapping = record(beforeCredentials.model_mapping) ?? {};
@@ -228,8 +230,27 @@ export class Sub2ApiRuntimeService {
         writeMode: "native-bulk-merge",
         persistedModelCount: Object.keys(persistedMapping).length,
       });
+    };
+    for (const accountId of ids) {
+      try {
+        await syncAccount(accountId);
+      } catch (error) {
+        if (!options.continueOnError) throw error;
+        const message = (error instanceof Error ? error.message : String(error))
+          .replace(/sk-[A-Za-z0-9_-]+/gu, "[REDACTED]")
+          .slice(0, 500);
+        failures.push({ accountId, ok: false, error: message });
+      }
     }
-    return { ok: true, accountIds: ids, results, persisted: true, writeMode: "native-bulk-merge", valuesPrinted: true };
+    return {
+      ok: failures.length === 0,
+      accountIds: ids,
+      results,
+      failures,
+      persisted: results.length > 0,
+      writeMode: "native-bulk-merge",
+      valuesPrinted: true,
+    };
   }
 
   // 只合并单个模型映射键，用于纠正指向无真实供给的上游目标名。
