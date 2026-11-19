@@ -94,3 +94,37 @@ test("response evidence is bounded and redacts credentials", () => {
   expect(JSON.stringify(row.responseEvidence)).not.toContain("sk-secret");
   expect(String((row.responseEvidence as Record<string, unknown>).summary).length).toBeLessThanOrEqual(512);
 });
+
+test("probe key rows are flagged and not customer visible", () => {
+  const probeRow = projectErrorDetailRow({
+    id: 5,
+    request_id: "probe-1",
+    api_key_name: "api2business-probe-368",
+    group_name: "api2business-probe-368",
+    probe: true,
+    upstream_status_code: 403,
+    recorded_status_code: 503,
+  }, "Asia/Shanghai");
+  expect(probeRow.probe).toBeTrue();
+  expect(probeRow.customerVisible).toBeFalse();
+  const realRow = projectErrorDetailRow({
+    id: 6,
+    request_id: "real-1",
+    api_key_name: "CODEX",
+    group_name: "default",
+    probe: false,
+    upstream_status_code: 502,
+  }, "Asia/Shanghai");
+  expect(realRow.probe).toBeFalse();
+  expect(realRow.customerVisible).toBeTrue();
+});
+
+test("error list projection exposes probe detection for downstream filtering", () => {
+  expect(errorListQuery).toContain("AS probe");
+  expect(errorListQuery).toContain("api2business-probe-%");
+});
+
+test("error list accepts a bounded observation window", () => {
+  expect(errorListQuery).toContain("o.created_at >= $2::timestamptz");
+  expect(errorListQuery).toContain("o.created_at < $3::timestamptz");
+});

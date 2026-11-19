@@ -346,7 +346,7 @@ export interface ProbeIsolationBinding {
 }
 
 export interface ProbeIsolationScope {
-  platform: "openai" | "anthropic" | "grok" | "deepseek" | "opencode_go" | "command_code";
+  platform: "openai" | "anthropic" | "grok" | "deepseek" | "opencode_go" | "command_code" | "gemini";
   eligibleGroupIds: number[];
   /**
    * 账号已经拥有的业务分组之外，需要补绑的分组。
@@ -715,7 +715,7 @@ export class ProbeIsolationService {
         throw new Error(`探活账号平台识别阶段失败：${errorMessage(error)}`);
       }
       const platform = String(account.platform ?? "").toLowerCase();
-      if (platform !== "openai" && platform !== "anthropic" && platform !== "grok" && platform !== "deepseek") {
+      if (platform !== "openai" && platform !== "anthropic" && platform !== "grok" && platform !== "deepseek" && platform !== "gemini") {
         throw new Error(`账号 ${accountId} 缺少受支持的平台，不能创建探活隔离`);
       }
       if (scope && scope.platform !== platform) throw new Error(`账号 ${accountId} 的实际平台与探活作用域不一致`);
@@ -741,7 +741,7 @@ export class ProbeIsolationService {
   async request(accountId: number, input: string, model: string, maxOutputTokens: number, timeoutMs: number): Promise<Record<string, unknown>> {
     const stored = this.readFile().records[String(accountId)];
     if (!stored || !readyRecord(stored)) throw new Error(`账号 ${accountId} 的探活隔离凭据尚未就绪`);
-    const chatCompletions = stored.platform === "deepseek";
+    const chatCompletions = stored.platform === "deepseek" || stored.platform === "gemini";
     const response = await fetch(`${this.config.sub2api.idleProbe.isolation.gatewayBaseUrl}${chatCompletions ? "/chat/completions" : "/responses"}`, {
       method: "POST",
       headers: {
@@ -810,7 +810,7 @@ export class ProbeIsolationService {
       record: stored,
     };
     const requestId = crypto.randomUUID();
-    const transport: MathProbeTransport = ensured.record.platform === "deepseek" ? "chat_completions" : "responses";
+    const transport: MathProbeTransport = ensured.record.platform === "deepseek" || ensured.record.platform === "gemini" ? "chat_completions" : "responses";
     const probeRequest = buildMathProbeRequestBody({
       model,
       question: question.prompt,

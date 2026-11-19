@@ -291,7 +291,7 @@ function percentile(values: number[], ratio: number): number | null {
 }
 
 export interface PoolQualitySample {
-  platform: "codex" | "claude" | "grok" | "deepseek";
+  platform: "codex" | "claude" | "grok" | "deepseek" | "gemini";
   sampledAt: string;
   rawCallCount: number;
   rawSuccessRequests: number;
@@ -359,7 +359,7 @@ export async function collectPoolQualitySample(
   config: AppConfig,
   reads: Sub2ApiReadClient,
   sampledAt = new Date().toISOString(),
-  platform: "codex" | "claude" | "grok" | "deepseek" = "codex",
+  platform: "codex" | "claude" | "grok" | "deepseek" | "gemini" = "codex",
 ): Promise<PoolQualitySample> {
   const recentCallLimit = 1000;
   const policy = platform === "claude"
@@ -368,6 +368,8 @@ export async function collectPoolQualitySample(
       ? config.sub2api.grokPriorityPlan
       : platform === "deepseek"
         ? (config.sub2api.deepseekPriorityPlan ?? config.sub2api.priorityPlan)
+        : platform === "gemini"
+          ? (config.sub2api.geminiPriorityPlan ?? config.sub2api.priorityPlan)
         : config.sub2api.priorityPlan;
   const groupIds = [...new Set(policy.eligibleGroupIds)].sort((a, b) => a - b);
   const sampledAtMs = Date.parse(sampledAt);
@@ -414,8 +416,8 @@ export async function collectPoolQualitySample(
   }
   const scored = scoreRecentDatabaseRow({
     account_id: 0,
-    account_name: platform === "claude" ? "Claude" : platform === "grok" ? "Grok" : platform === "deepseek" ? "DeepSeek" : "Codex",
-    platform: platform === "claude" ? "anthropic" : platform === "grok" ? "grok" : platform === "deepseek" ? "deepseek" : "openai",
+    account_name: platform === "claude" ? "Claude" : platform === "grok" ? "Grok" : platform === "deepseek" ? "DeepSeek" : platform === "gemini" ? "Gemini" : "Codex",
+    platform: platform === "claude" ? "anthropic" : platform === "grok" ? "grok" : platform === "deepseek" ? "deepseek" : platform === "gemini" ? "gemini" : "openai",
     account_type: "apikey",
     status: "active", schedulable: true, priority: 0, group_ids: groupIds, group_names: ["混池", "自用"],
     success_requests: weightedCount(successes), failure_requests: weightedCount(failures),
@@ -481,7 +483,7 @@ export async function collectPoolQualityErrors(
   reads: Sub2ApiReadClient,
   input: {
     sampledAt: string;
-    platform?: "codex" | "claude" | "grok" | "deepseek";
+    platform?: "codex" | "claude" | "grok" | "deepseek" | "gemini";
     page: number;
     pageSize: number;
     filter: PoolQualityErrorFilter;
@@ -506,6 +508,8 @@ export async function collectPoolQualityErrors(
       ? config.sub2api.grokPriorityPlan
       : platform === "deepseek"
         ? (config.sub2api.deepseekPriorityPlan ?? config.sub2api.priorityPlan)
+        : platform === "gemini"
+          ? (config.sub2api.geminiPriorityPlan ?? config.sub2api.priorityPlan)
         : config.sub2api.priorityPlan;
   const groupIds = [...new Set(policy.eligibleGroupIds)].sort((a, b) => a - b);
   const offset = (input.page - 1) * input.pageSize;

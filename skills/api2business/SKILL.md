@@ -133,7 +133,7 @@ bun skills/api2business/scripts/api2business-cli.ts --config config/api2business
   - URL 只匹配 owning YAML 中的唯一 HTTP target。
   - 不接受无值、布尔值、别名或隐式默认运行面。
   - 回执显示 `canonicalUrl`；续查命令保留该 URL。
-- `reads runtime --group <正整数> --platform openai|anthropic|grok|deepseek --over-api <绝对 URL>`
+- `reads runtime --group <正整数> --platform openai|anthropic|grok|deepseek|gemini --over-api <绝对 URL>`
   只读返回可用性、并发及实际原生版本，边界见 [可观测性](references/observability.md#原生调度诊断补充)。
 - `reads query --file <broker-read-request.json> --over-api <绝对 http(s) URL>`：
   - 复用 `/api/internal/sub2api-read` 的排队只读通道。
@@ -178,7 +178,7 @@ bun skills/api2business/scripts/api2business-cli.ts --config config/api2business
 - 该参考同时定义 API-key 切号模板的平台边界、成本补齐、评分分层和 V2 迁移；本技能只
   保留入口和命令，不复制第二套算法或状态机。
 - 数值语义探活、TTFT 证据、缺失样本和评分参与边界只见上述参考，本技能不复制评分算法。
-- 池级质量调查使用 `scores pool-quality [--scope codex|claude|grok|deepseek] --over-api <absolute-http(s)-URL>`。
+- 池级质量调查使用 `scores pool-quality [--scope codex|claude|grok|deepseek|gemini] --over-api <absolute-http(s)-URL>`。
   - 省略作用域只返回 Codex，回执里的 `platform` 必须与所问作用域一致。
   - `--platform` 接受同一组作用域名；与 `--scope` 冲突或写成供应商名时直接失败。
   - 账号评分快照使用 `scores get`，
@@ -188,7 +188,7 @@ bun skills/api2business/scripts/api2business-cli.ts --config config/api2business
 - 单账号优先级前后变化使用
   `priority history --account <正整数ID> --over-api <absolute-http(s)-URL>`。
   - 省略 `--account` 只返回有界轮次摘要，不能判断某个账号是否降级。
-  - `--scope codex|claude|grok|deepseek` 只保留该作用域轮次。
+  - `--scope codex|claude|grok|deepseek|opencode|gemini` 只保留该作用域轮次。
   - 人类输出披露 `omitted` 与 `displayOmitted`；完整对象使用 `--json`。
   - 过载计入、切号抑制和证据边界只见
     [过载扣分与优先级证据](references/upstream-scheduling.md#过载扣分与优先级证据)。
@@ -204,10 +204,10 @@ bun skills/api2business/scripts/api2business-cli.ts --config config/api2business
   陈旧时最多等待约 10 秒让服务后台重建完成并返回最新回执，重建失败或超时则原样返回陈旧回执；需要同步重建时追加
   `--refresh`，只读取最近成功的读模型缓存时追加 `--cache-only`，两者不可同时使用。`cache.state=stale` 且
   `cache.complete=true` 只表示读模型仍在刷新，不等于数据缺失或刷新失败；用同一入口重读/等待即可，不要据此误报故障。使用
-  `upstream-scheduling-v2 priority-run --scope <codex|claude|grok|deepseek> --confirm --over-api <absolute-http(s)-URL>`
+  `upstream-scheduling-v2 priority-run --scope <codex|claude|grok|deepseek|opencode|gemini> --confirm --over-api <absolute-http(s)-URL>`
   通过原生 worker 执行一次指定作用域的手动优先级调整；作用域的
   `scoreRead`、`planRead`、`planWrite`、`priorityAutomation`、`idleProbe` 和
-  `upstreamWrite` 只认 owning YAML；Codex、Claude、Grok、DeepSeek 使用同一套平等作用域接口。
+  `upstreamWrite` 只认 owning YAML；Codex、Claude、Grok、DeepSeek、Gemini 使用同一套平等作用域接口。
   自动探活必须先完成同作用域的手动探活核验，再打开
   `features.idleProbe`。V2 是唯一调度运行面；旧全局页面、工作流、写入 API、CLI 命令和
   配置字段已经删除，配置加载会拒绝这些退役字段，禁止兼容复活。
@@ -243,7 +243,8 @@ bun skills/api2business/scripts/api2business-cli.ts --config config/api2business
   - 这些计数只证明作业终态；完整对象用 `--json`，账号规则仍要无缓存回读。
 - 切号模板的匹配、近义短语、热加载、分组口语和新增上游收口，只以该参考为准。
 - `upstreams template --confirm --over-api <absolute-http(s)-URL>` 按账号平台写入各自模板。
-  - 未传 `--accounts` 时会处理 OpenAI、Anthropic 和 Grok，不能用来更新单一平台。
+  - 未传 `--accounts` 时处理所有已配置模板的 API-key 平台；
+    需要只更新单一平台时仍应传入该平台全部账号 ID。
   - 单平台更新必须传入该平台全部未删除 API-key 账号 ID。
   - Grok 只读取 `config/failover-templates/grok.yaml`。
   - 套用 Grok 时不写 `pool_mode`，也不改写 Codex 或 Claude 规则。
@@ -328,7 +329,7 @@ bun skills/api2business/scripts/api2business-cli.ts --config config/api2business
   读取、原生 bulk merge、单账号失败边界和写后回读唯一见
   [上游与调度](references/upstream-scheduling.md)。
 - V2 作用域模型同步使用以下 CLI：
-  - `upstream-scheduling-v2 model-sync plan --scope <codex|claude|grok|deepseek> --over-api <absolute-http(s)-URL>` 只读生成下一批计划；
+  - `upstream-scheduling-v2 model-sync plan --scope <codex|claude|grok|deepseek|gemini> --over-api <absolute-http(s)-URL>` 只读生成下一批计划；
   - `upstream-scheduling-v2 model-sync run --scope <scope> [--accounts <id,...>] --confirm --over-api <absolute-http(s)-URL>` 执行手动批次；
   - `upstream-scheduling-v2 model-sync history --scope <scope> --over-api <absolute-http(s)-URL>` 查询轮次和账号明细。
   - 自动批次上限和间隔由 `operations.upstreamSchedulingV2.modelSync` 配置；自动开关只认各作用域的 `features.modelSyncAutomation`，每批最多 10 个，上一批完成后开始计时。
@@ -354,7 +355,7 @@ bun skills/api2business/scripts/api2business-cli.ts --config config/api2business
     --scope grok
   ```
 
-- `--scope` 可选，只接受 owning YAML 中已启用的 `codex`、`claude`、`grok` 或 `deepseek` 作用域；CLI 将其写入
+- `--scope` 可选，只接受 owning YAML 中已启用的 `codex`、`claude`、`grok`、`deepseek`、`opencode` 或 `gemini` 作用域；CLI 将其写入
   V2 深链查询参数，并在 stderr 输出带 profile、scope 和 phase 的短进度行，避免临时脚本拼接 URL
   或长时间无输出。省略时使用配置中的默认作用域。
 - 成功回执的 `retainedScreenshots` 按 profile 和 scope 保留桌面与窄屏 PNG。

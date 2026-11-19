@@ -240,6 +240,7 @@ export async function collectRechargeCandidates(
   const accounts = query.rows.map((row) => {
     const scorePolicy = String(row.platform).toLowerCase() === "grok" ? config.sub2api.grokScorePolicy
       : String(row.platform).toLowerCase() === "deepseek" ? (config.sub2api.deepseekScorePolicy ?? config.sub2api.scorePolicy)
+        : String(row.platform).toLowerCase() === "gemini" ? (config.sub2api.geminiScorePolicy ?? config.sub2api.scorePolicy)
         : config.sub2api.scorePolicy;
     const scored = scoreRecentDatabaseRow(row, 1000, scorePolicy, Date.now(), billingPatterns(config));
     const anchorAt = new Date(String(row.anchor_at)).toISOString();

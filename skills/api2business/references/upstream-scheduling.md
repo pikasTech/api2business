@@ -34,6 +34,7 @@
 
 - 平台模板规则新增或修订后，必须覆盖该平台全部未删除的 API-key 上游。
   - Codex 模板对应 `platform=openai`；Claude 模板对应 `platform=anthropic`；Grok 模板对应 `platform=grok`。
+  - DeepSeek、OpenCode 与 Gemini 分别对应 `platform=deepseek`、`platform=opencode_go` 与 `platform=gemini`。
   - 不能只修报错账号、试点账号、同一供应商或某个分组。
   - 不能按当前启用、可调度、余额或近期是否报错缩小范围。
   - 非 API-key 账号不属于上游管理范围，不参与本操作。
@@ -153,6 +154,13 @@
   - 到期后的下一次手动同步必须只写 canonical 键，并回读确认别名键消失。
   - 移除时间、影响范围和旧名流量证据写入 TaskTree 或执行记录，不能只留在聊天。
   - 任何情况下都不得恢复自动同步。
+- `upstreams model-alias` 只新增或改写 alias 键的落点；canonical 键已存在时再指向自身会返回
+  `already maps to itself; refusing a no-op write`，此时不要改用其他写入口硬改，应先用
+  `upstream-scheduling-v2 model-sync run --scope <scope> --accounts <id> --confirm` 采纳上游真实模型名，
+  再回读确认 alias 与 canonical 一致。
+- 别名写入后 `reads query` 的 broker 回读可能落后于主库：写回执的 `previousTarget`、同步 history
+  与回读不一致时，至少等待 60 秒再读，并以“写回执 + 同步终态 + 稍后回读”三者一致作为完成证据；
+  不得根据一次滞后回读重复写入或判定修复失败。
 - 防复活检查至少覆盖：配置三平台拒绝、OpenAI 允许、缺策略时不静默开放、worker 只启动允许平台、
   别名归一化、CommandCode 前缀、仅 1017 例外、幂等和非映射字段不变。
 - 作用域筛选与账号写入必须分离：
@@ -401,6 +409,10 @@
     消失；普通用户流量仍不能反向归入探活账号。
   - 覆盖判定只认同作用域 `accounts idle-probe coverage` 的专用 Key 记录；
     plan 的 `availableSampleCount` 是评分可用样本，不等于探活专用 Key 已覆盖。
+    - coverage 同时返回账号的 `businessSampleCount`/`businessLatestAt`/`trafficSampled`。
+      有真实业务样本但本轮未被 idle 计划选中的账号会进入
+      `trafficSampledMissingCount`，只有 `actionableMissingAccountIds` 才是需要修复的
+      探活绑定缺口；严格口径 `ok=false` 与可执行缺口分开阅读，不能把忙碌账号当作无样本。
   - active 且 `schedulable=true` 但缺少私有探活绑定的账号，会被每轮计划记为
     `unready`；自动轮次必须在 `provisionCandidateLimit` 预算内调用隔离绑定的
     `ensure()` 修复后重试，不能只等待下一轮。
@@ -420,7 +432,7 @@
     5 分钟或关闭；选择保存在浏览器本地。自动刷新使用快照接口的显式 refresh 请求，
     只更新读模型缓存，不触发探活、优先级调整、模型同步或任何上游写入。刷新失败时保留
     上一次成功快照，并在数据状态中显示失败原因，下一轮仍按失败完成时间重新计时。
-  - Codex、Claude、Grok 和 DeepSeek 是平等作用域。每个作用域的平台、分组、成本、评分、优先级、
+  - Codex、Claude、Grok、DeepSeek 和 Gemini 是平等作用域。每个作用域的平台、分组、成本、评分、优先级、
     自动调度和探活是否启用均以该作用域开关为准，不把其他作用域数据互相投影。
   - 页面历史按 `profiles` 过滤。
   - 投影标签与 Go worker 的探活、模型同步允许列表必须覆盖同一组已启用作用域。
@@ -434,12 +446,15 @@
     内的值保持严格递增，超出 top-k 的账号仍落在 `maximumPriority` 尾部。
     可以独立打开 `features.priorityAutomation` 和 `features.idleProbe`；关闭探活的作用域
     快照和池质量读取不创建探活记录。手动核验任一作用域时使用
-    `accounts idle-probe plan|reconcile|run --scope <codex|claude|grok|deepseek> --over-api <absolute-http(s)-URL>`；确认
+    `accounts idle-probe plan|reconcile|run --scope <codex|claude|grok|deepseek|gemini> --over-api <absolute-http(s)-URL>`；确认
     普通请求记录、`ordinaryLogRecorded` 和轮次记录成功后，才打开对应作用域的探活开关。
   - Grok 评分和优先级的质量权重由 owning YAML 的 `grokScorePolicy` 与
     `grokPriorityPlan` 独立控制。当前生产配置将优先级质量权重设为可靠性 70、延迟 30、
     成本 0；质量更高的账号必须排在仅成本更低的账号之前，计划仍按
     `minimumPriority` 起始的规范化 top-k 写入。
+  - Gemini 使用独立的 `geminiScorePolicy`、`geminiPriorityPlan` 和 `platform: gemini` 作用域；
+    试运行分组只认 owning YAML 的 `eligibleGroupIds`，不并入 antigravity 的独占 Gemini 分组。
+    Gemini API-key 的数值探活走普通网关 Chat Completions；不能套用 Codex Responses 路径。
   - V2 的间隔和样本档位从 `scopes`、`snapshot` 回读；旧 priority automation 和
     priority plan 命令不再存在。
   - V2 首屏读取先返回按作用域持久化的读模型缓存；缓存未过
@@ -494,7 +509,7 @@
       - 最近 1000 条未满再取 7 天。
       - 两窗都不足才查全历史。
       - 有界查询超时后不再放宽窗口。
-    - 四个作用域在同一轮内分别采样，成功后立即持久化。
+    - 每个已启用作用域在同一轮内分别采样，成功后立即持久化；新增 Gemini 时同样要求独立样本。
       - 一个作用域失败只记录该作用域，其余作用域继续。
       - 全部失败才让本轮活动失败。
   - 账号分、池分和优先级排序分不可互相替代，报告中必须写明查询命令、时间窗口、
@@ -543,11 +558,12 @@
 - 任何真实写操作先展示计划，再显式确认并回读验证。
 - 单个请求的切号判定优先使用 `errors inspect --request-id <request-id> --over-api <absolute-http(s)-URL>`；该入口并行取得诊断链和请求详情。需要只看聚合诊断时才使用 `errors diagnose --request-id <request-id> --over-api <absolute-http(s)-URL>`，不要用大范围错误列表推断单请求是否命中模板。
 - 按模型排障使用 `errors diagnose --model <exact-model-id> --limit <N> --top <N> --over-api <absolute-http(s)-URL>`。返回的模型 × 账号 × 链矩阵与样本链均来自已持久化尝试；运行面未记录的候选排除原因必须标记为未知，不能反推。
+- `--top` 只返回排序后的有限样本链（默认 50，上限 100），不等于全窗链数；全窗核对必须按 `--model` 或 `--request-id` 拆分，或先读 `errors list` 再逐条 `errors inspect`，不能把 topN 当全窗。
 - 精确诊断中的 `responseEvidence` 只展示限长脱敏摘要；`available=false` 表示运行面没有持久化可读正文，不能把包装层错误文本当作供应商业务原因。
 
 ### 零样本账号暖启动优先级
 
-- 本规则统一适用于 Codex、Claude、Grok、DeepSeek 和 OpenCode 优先级作用域。
+- 本规则统一适用于 Codex、Claude、Grok、DeepSeek、OpenCode 和 Gemini 优先级作用域。
 - 零样本账号指同一 `platform` 与 `eligibleGroupIds` 内、`score=null` 且
   `observedAttempts=0` 的账号。
 - 仅当作用域 `explorationWeight=0` 时启用暖启动：
@@ -610,7 +626,7 @@
 
 ### 自动巡检低分归因与处置
 
-- 每轮主动比较 Codex、Claude、Grok 的候选质量、池级质量与实际承流分布。
+- 每轮主动比较所有已启用作用域的候选质量、池级质量与实际承流分布。
   - 综合分低、持续下滑或业务 SLO 未达标时，必须下钻，不能只抄分数或等待用户报错。
   - 先核对采样时间和覆盖，排除语音、探活及已归因的下游账务限制。
   - 陈旧、缺失或查询失败先修 Api2Business 的采集与查询，不判为上游整体质量差。
@@ -734,16 +750,16 @@
 
 ### 样本陈旧与自动优先级失败的自愈顺序
 
-- 最新样本停滞且四个作用域持续出现自动调整失败时，按同一链路归因，不按平台分别猜配置：
+- 最新样本停滞且多个作用域持续出现自动调整失败时，按同一链路归因，不按平台分别猜配置：
   1. 读取 `scores rank --over-api <absolute-http-URL>`，记录 `refreshedAt`、`queryDurationMs` 和账号数。
-  2. 对 Codex、Claude、Grok、DeepSeek 分别读取 `upstream-scheduling-v2 snapshot`、
+  2. 对 Codex、Claude、Grok、DeepSeek、Gemini 分别读取 `upstream-scheduling-v2 snapshot`、
      `plan` 和 `priority history --scope <scope>`。
   3. 若历史出现 `score-query-slow-or-unknown`、`score-query-failed` 或查询耗时接近
      `automationSafety.maximumScoreQueryDurationMs`，进入评分 SQL 和大作用域下推检查。
   4. 核对探活事实数量、是否按账号限量、成功/失败事实是否已预聚合，以及平台/分组是否已下推。
   5. 修复代码后运行类型检查、定向测试、全量测试和 `deploy:validate`，再走 owning CLI 部署；
      不直接查询 Sub2API 业务库，不放宽读超时或自动调度预算来掩盖慢查询。
-  6. 部署后重跑四个作用域的 snapshot、plan 和自动优先级轮次，要求全部成功或明确 `no-change`，
+  6. 部署后重跑全部已启用作用域的 snapshot、plan 和自动优先级轮次，要求全部成功或明确 `no-change`，
      且查询耗时低于预算；同时确认 `scores rank` 的 `refreshedAt` 前进、样本时间持续更新。
 - 自动优先级只有在“查询成功、写入/回读成功、历史无阻断、新鲜样本持续产生”同时满足时才算恢复。
   `planWrite=false` 不等于自动调度关闭；单次 `no-change` 也不等于查询恢复。
@@ -784,7 +800,7 @@
   个状态来源，计划 API 仅用于 CLI/API 审计。
 - 探活历史查询按作用域功能开关和平台读取，不能用 Codex/Grok 的质量档位过滤掉已启用的
   Claude 记录；读模型首次为空或过期时，应等待后台刷新后按同一作用域再次读取。
-- `accounts idle-probe coverage --scope <codex|claude|grok|deepseek> --window-minutes <N> --over-api <absolute-http(s)-URL>`
+- `accounts idle-probe coverage --scope <codex|claude|grok|deepseek|gemini> --window-minutes <N> --over-api <absolute-http(s)-URL>`
   是按作用域核对专用 Key 覆盖的唯一 CLI 入口；coverage 的平台和 eligible groups 必须
   从该作用域 YAML 传入，不能固定查询 OpenAI。短窗口缺失只表示该窗口没有专用记录，需
   同时查看 24 小时 coverage 和账号快照，不能把短窗口缺失当作账号永久无样本。
@@ -794,7 +810,7 @@
   - 裁切发生在 settle 之后。
   - 同来源截图串行执行。
   - Cookie 只留在进程环境，不进 argv、日志或磁盘。
-- 轮次摘要使用 `priority history --scope <codex|claude|grok|deepseek>`。
+- 轮次摘要使用 `priority history --scope <codex|claude|grok|deepseek|opencode|gemini>`。
   - 人类输出有界，并披露 `omitted` 与 `displayOmitted`。
   - 每轮第二行显示 `query`、`snapshotAge`、`reason` 和 `recovery`；失败轮次不得只显示状态。
   - 单账号前后值仍使用 `--account`。
@@ -876,7 +892,7 @@
 - 相对脚本路径必须从仓库根目录执行。
   - `Module not found` 表示路径不存在，不表示命令未实现。
 - `scores pool-quality` 不带作用域时只读取 Codex。
-  - 其他作用域使用 `--scope` 或 `--platform`，取值 `codex|claude|grok|deepseek`。
+  - 其他作用域使用 `--scope` 或 `--platform`，取值 `codex|claude|grok|deepseek|gemini`。
   - 未知值或两个参数不一致时直接失败。
   - 人类回执打印 `platform`。不能把 Codex 分数当成其他作用域。
   - 新鲜度仍只认该作用域的 `sampledAt`。窗口规则见上文池级大表查询。
@@ -910,8 +926,9 @@
   - 最终费率以排队回读为准，不以创建初始快照或 `detectionOk` 判定。
 - 每个新上游都要配置并核验同平台切号模板及私有探活绑定。
   - 模板仅由 `operations.upstreamManagement.templateFiles` 声明。
-  - OpenAI、Anthropic 和 Grok 分别使用 Codex、Claude 和 Grok 模板。
+  - OpenAI、Anthropic、Grok、DeepSeek、OpenCode 和 Gemini 各自使用同平台模板。
   - Codex API-key 额外写入 `extra.openai_responses_mode=force_responses`。
+  - DeepSeek 与 Gemini API-key 的探活 transport 固定为 Chat Completions。
   - 其他平台不写该字段；Responses 调用成功不能替代强制模式的字段回读。
 - 初始化只保留账号实际业务分组，并增加该账号自己的私有探活分组。
   - 不把 `eligibleGroupIds`、历史默认分组或其他账号的私有分组并入账号。

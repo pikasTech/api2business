@@ -2,18 +2,18 @@ const entry = "bun skills/api2business/scripts/api2business-cli.ts";
 
 const configOption = "可选；Api2Business 仓库根自动读取 config/api2business.yaml，其他 cwd 必须显式传入 owning YAML；查看帮助不加载配置";
 const overApiOption = "实际查询或写入必填；owning YAML 声明的绝对 HTTP(S) URL，不接受别名、布尔开关或隐式目标";
-const scopeOption = "可选；限定 codex、claude、grok 或 deepseek；生产排查应显式传入，避免把默认作用域当成所问作用域";
+const scopeOption = "可选；限定 codex、claude、grok、deepseek 或 gemini；生产排查应显式传入，避免把默认作用域当成所问作用域";
 const jsonOption = "输出结构化回执，便于 jq 只投影必要字段";
 
 export function priorityHistoryHelp(): Record<string, unknown> {
   return {
     ok: true,
     command: "priority history",
-    usage: `${entry} --config <owning-YAML> priority history --over-api <absolute-http(s)-URL> [--scope codex|claude|grok|deepseek|opencode] [--account <positive-id>] [--json]`,
+    usage: `${entry} --config <owning-YAML> priority history --over-api <absolute-http(s)-URL> [--scope codex|claude|grok|deepseek|opencode|gemini] [--account <positive-id>] [--json]`,
     options: {
       "--config": "实际查询使用的 owning YAML；查看帮助不加载配置",
       "--over-api": "实际查询必填；owning YAML 声明的绝对 HTTP(S) URL，不接受别名或布尔开关",
-      "--scope": "可选；只保留 profile 或 profiles 含该作用域的轮次。取值 codex、claude、grok、deepseek、opencode",
+      "--scope": "可选；只保留 profile 或 profiles 含该作用域的轮次。取值 codex、claude、grok、deepseek、opencode、gemini",
       "--account": "可选；正整数账号 ID。给出后只返回该账号的前后优先级，不返回其他账号或原始 priorities",
       "--json": "展开匹配轮次的完整回执，包括作用域、触发方式、终态及实际变更数",
     },
@@ -81,15 +81,15 @@ export function idleProbeHelp(action?: string): Record<string, unknown> {
   const selected = action && idleProbeActions.includes(action as typeof idleProbeActions[number]) ? action : null;
   if (action && !selected && action !== "--help") throw new Error(`unknown accounts idle-probe action ${action}`);
   const usageSuffix = selected === "history"
-    ? "[--scope codex|claude|grok|deepseek] [--page N]"
+    ? "[--scope codex|claude|grok|deepseek|gemini] [--page N]"
     : selected === "coverage"
-      ? "[--scope codex|claude|grok|deepseek] [--window-minutes N]"
+      ? "[--scope codex|claude|grok|deepseek|gemini] [--window-minutes N]"
       : selected === "reconcile"
-        ? "[--accounts <id-or-range,...>] [--scope codex|claude|grok|deepseek] [--confirm]"
+        ? "[--accounts <id-or-range,...>] [--scope codex|claude|grok|deepseek|gemini] [--confirm]"
         : selected === "run"
-          ? "[--accounts <id-or-range,...>] [--scope codex|claude|grok|deepseek] [--rounds 1..10] [--confirm]"
+          ? "[--accounts <id-or-range,...>] [--scope codex|claude|grok|deepseek|gemini] [--rounds 1..10] [--confirm]"
           : selected === "plan"
-            ? "[--accounts <id-or-range,...>] [--scope codex|claude|grok|deepseek]"
+            ? "[--accounts <id-or-range,...>] [--scope codex|claude|grok|deepseek|gemini]"
             : "plan|history|coverage|reconcile|run [options]";
   const options: Record<string, string> = {
     "--config": configOption,
@@ -158,12 +158,12 @@ export function upstreamSchedulingV2Help(action?: string, subaction?: string): R
     if (!modelSyncAction || modelSyncAction === "history") options["--page"] = "可选；正整数页码，省略为 1";
   }
   const usage = selected === "priority-run"
-    ? `${entry} --config <owning-YAML> upstream-scheduling-v2 priority-run --scope codex|claude|grok|deepseek [--confirm] --over-api <absolute-http(s)-URL> [--json]`
+    ? `${entry} --config <owning-YAML> upstream-scheduling-v2 priority-run --scope codex|claude|grok|deepseek|opencode|gemini [--confirm] --over-api <absolute-http(s)-URL> [--json]`
     : selected === "snapshot"
-      ? `${entry} --config <owning-YAML> upstream-scheduling-v2 snapshot [--scope codex|claude|grok|deepseek] [--refresh|--cache-only] --over-api <absolute-http(s)-URL> [--json]`
+      ? `${entry} --config <owning-YAML> upstream-scheduling-v2 snapshot [--scope codex|claude|grok|deepseek|gemini] [--refresh|--cache-only] --over-api <absolute-http(s)-URL> [--json]`
       : selected === "model-sync"
-        ? `${entry} --config <owning-YAML> upstream-scheduling-v2 model-sync ${modelSyncAction ?? "plan|run|history"} [--scope codex|claude|grok|deepseek] [--accounts <id-or-range,...>]${!modelSyncAction || modelSyncAction === "run" ? " [--confirm]" : ""}${!modelSyncAction || modelSyncAction === "history" ? " [--page N]" : ""} --over-api <absolute-http(s)-URL> [--json]`
-        : `${entry} --config <owning-YAML> upstream-scheduling-v2 ${path} [--scope codex|claude|grok|deepseek] --over-api <absolute-http(s)-URL> [--json]`;
+        ? `${entry} --config <owning-YAML> upstream-scheduling-v2 model-sync ${modelSyncAction ?? "plan|run|history"} [--scope codex|claude|grok|deepseek|gemini] [--accounts <id-or-range,...>]${!modelSyncAction || modelSyncAction === "run" ? " [--confirm]" : ""}${!modelSyncAction || modelSyncAction === "history" ? " [--page N]" : ""} --over-api <absolute-http(s)-URL> [--json]`
+        : `${entry} --config <owning-YAML> upstream-scheduling-v2 ${path} [--scope codex|claude|grok|deepseek|gemini] --over-api <absolute-http(s)-URL> [--json]`;
   return {
     ok: true,
     command: `upstream-scheduling-v2 ${path}`,
@@ -202,6 +202,25 @@ export function scoreRankHelp(): Record<string, unknown> {
   };
 }
 
+export function modelAliasHelp(): Record<string, unknown> {
+  return {
+    ok: true,
+    command: "upstreams model-alias",
+    usage: `${entry} --config <owning-YAML> upstreams model-alias --id <account-id> --model <alias> --upstream-model <upstream-model> [--confirm] --over-api <absolute-http(s)-URL> [--json]`,
+    options: {
+      "--config": configOption,
+      "--over-api": overApiOption,
+      "--id": "必填；正整数 Sub2API 账号 ID",
+      "--model": "必填；对外暴露的模型别名，原样写入 model_mapping 键",
+      "--upstream-model": "必填；该别名映射到的上游模型，写入 model_mapping 值",
+      "--confirm": "执行确认；省略时只返回预览并设置 mutation=false",
+      "--json": jsonOption,
+    },
+    behavior: "只合并单个账号的 model_mapping 键，不改其他键、优先级、分组、并发或凭据；默认预览，--confirm 后写入并回读 persisted。",
+    verification: "回读 model_mapping 中该别名与目标上游模型，核对 persisted=true、mappingKeyCount 只增不减；回滚动作见回执 deleteModel。",
+  };
+}
+
 export function operationHelp(args: string[]): Record<string, unknown> | null {
   const position = (first: string, second?: string): number => args.findIndex((item, index) => item === first && (second === undefined || args[index + 1] === second));
   const actionAfter = (start: number, actions: readonly string[]): string | undefined => args.slice(start + 1).find((item) => actions.includes(item));
@@ -217,5 +236,7 @@ export function operationHelp(args: string[]): Record<string, unknown> | null {
   }
   const scores = position("scores", "rank");
   if (scores >= 0) return scoreRankHelp();
+  const modelAlias = position("upstreams", "model-alias");
+  if (modelAlias >= 0) return modelAliasHelp();
   return null;
 }

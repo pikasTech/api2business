@@ -38,7 +38,7 @@ type LatencyNormalization = {
   maximumTtftP95Ms: number | null;
 };
 
-type PriorityProfile = "codex" | "claude" | "grok" | "deepseek" | "opencode";
+type PriorityProfile = "codex" | "claude" | "grok" | "deepseek" | "opencode" | "gemini";
 
 function latencyBounds(config: AppConfig, profile: PriorityProfile): {
   minimumTtftP95Ms: number;
@@ -47,6 +47,7 @@ function latencyBounds(config: AppConfig, profile: PriorityProfile): {
   const scorePolicy = profile === "grok" ? config.sub2api.grokScorePolicy
     : profile === "deepseek" ? (config.sub2api.deepseekScorePolicy ?? config.sub2api.scorePolicy)
       : profile === "opencode" ? (config.sub2api.opencodeScorePolicy ?? config.sub2api.poolScorePolicy ?? config.sub2api.scorePolicy)
+        : profile === "gemini" ? (config.sub2api.geminiScorePolicy ?? config.sub2api.scorePolicy)
       : config.sub2api.scorePolicy;
   return {
     minimumTtftP95Ms: scorePolicy.ttftFullScoreMs,
@@ -730,6 +731,13 @@ export function buildAccountPriorityPlan(
         observedAnchorScore: null, priorityReferenceScore: null, costRange: null,
         priorities: {}, changes: [],
       };
+  const gemini = config.sub2api.geminiPriorityPlan
+    ? buildPriorityProfile(ranking, config, "gemini", config.sub2api.geminiPriorityPlan)
+    : {
+        eligibleCount: 0, fixedCount: 0, changedCount: 0, anchorScore: null,
+        observedAnchorScore: null, priorityReferenceScore: null, costRange: null,
+        priorities: {}, changes: [],
+      };
   const claudeReadOnly = config.operations.writePolicy?.claudeEnabled === true ? claude : {
     // owning YAML 关闭 Claude 写入时只保留资格统计，不把排序结果转成变更。
     ...claude,
@@ -746,6 +754,7 @@ export function buildAccountPriorityPlan(
     ...(grok.priorities as Record<string, number>),
     ...(deepseek.priorities as Record<string, number>),
     ...(opencode.priorities as Record<string, number>),
+    ...(gemini.priorities as Record<string, number>),
   };
   const changes = [
     ...(codex.changes as Array<Record<string, unknown>>),
@@ -753,10 +762,11 @@ export function buildAccountPriorityPlan(
     ...(grok.changes as Array<Record<string, unknown>>),
     ...(deepseek.changes as Array<Record<string, unknown>>),
     ...(opencode.changes as Array<Record<string, unknown>>),
+    ...(gemini.changes as Array<Record<string, unknown>>),
   ];
   return {
     ...codex,
-    policy: { codex: config.sub2api.priorityPlan, claude: claudePolicy, grok: config.sub2api.grokPriorityPlan, ...(config.sub2api.deepseekPriorityPlan ? { deepseek: config.sub2api.deepseekPriorityPlan } : {}), ...(config.sub2api.opencodePriorityPlan ? { opencode: config.sub2api.opencodePriorityPlan } : {}) },
+    policy: { codex: config.sub2api.priorityPlan, claude: claudePolicy, grok: config.sub2api.grokPriorityPlan, ...(config.sub2api.deepseekPriorityPlan ? { deepseek: config.sub2api.deepseekPriorityPlan } : {}), ...(config.sub2api.opencodePriorityPlan ? { opencode: config.sub2api.opencodePriorityPlan } : {}), ...(config.sub2api.geminiPriorityPlan ? { gemini: config.sub2api.geminiPriorityPlan } : {}) },
     profiles: {
       codex: {
         eligibleCount: codex.eligibleCount,
@@ -804,8 +814,17 @@ export function buildAccountPriorityPlan(
         priorityReferenceScore: opencode.priorityReferenceScore,
         costRange: opencode.costRange,
       },
+      gemini: {
+        eligibleCount: gemini.eligibleCount,
+        fixedCount: gemini.fixedCount,
+        changedCount: gemini.changedCount,
+        anchorScore: gemini.anchorScore,
+        observedAnchorScore: gemini.observedAnchorScore,
+        priorityReferenceScore: gemini.priorityReferenceScore,
+        costRange: gemini.costRange,
+      },
     },
-    eligibleCount: Number(codex.eligibleCount) + Number(claudeReadOnly.eligibleCount) + Number(grok.eligibleCount) + Number(deepseek.eligibleCount) + Number(opencode.eligibleCount),
+    eligibleCount: Number(codex.eligibleCount) + Number(claudeReadOnly.eligibleCount) + Number(grok.eligibleCount) + Number(deepseek.eligibleCount) + Number(opencode.eligibleCount) + Number(gemini.eligibleCount),
     changedCount: Object.keys(priorities).length,
     priorities,
     changes,

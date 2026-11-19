@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { AppConfig } from "./config";
-import { IdleAccountProbeService, idleProbeCandidatesSql, idleProbeRequestJitterMs, idleProbeRollingUsageSql, PROBE_COMPACT_CACHE_MIN_KNOWN_SAMPLES, selectIdleProbeModel, selectProbeCacheMode } from "./idle-account-probe";
+import { IdleAccountProbeService, idleProbeCandidatesSql, idleProbeCoverageSql, idleProbeRequestJitterMs, idleProbeRollingUsageSql, PROBE_COMPACT_CACHE_MIN_KNOWN_SAMPLES, selectIdleProbeModel, selectProbeCacheMode } from "./idle-account-probe";
 import type { Sub2ApiReadClient } from "./sub2api-read-executor";
 
 const config = {
@@ -514,4 +514,28 @@ test("compact cache mode is applied only to the planned candidate and stays visi
   const candidates = (result.results as Array<Record<string, unknown>>);
   expect(candidates.every((item) => item.response
     && typeof item.response === "object")).toBe(true);
+});
+
+test("idle probe coverage distinguishes business-traffic samples from probe gaps", async () => {
+  expect(idleProbeCoverageSql).toContain("business_samples AS");
+  expect(idleProbeCoverageSql).toContain("business_sample_count");
+  const service = new IdleAccountProbeService(config, reads([
+    {
+      account_id: 1496, account_name: "https://flow-node.com plus 0.15", account_status: "active",
+      schedulable: true, coverage_required: true, record_count: 0, usage_count: 0, error_count: 0,
+      latest_record_at: null, business_sample_count: 37, business_latest_at: "2026-11-18T09:09:00Z",
+    },
+    {
+      account_id: 1513, account_name: "https://api.laoliimage2.win gpt-guan 0.2", account_status: "active",
+      schedulable: true, coverage_required: true, record_count: 2, usage_count: 2, error_count: 0,
+      latest_record_at: "2026-11-18T09:05:00Z", business_sample_count: 0, business_latest_at: null,
+    },
+  ]), null);
+  const coverage = await service.coverage(120);
+  expect(coverage.ok).toBe(false);
+  expect(coverage.missingCount).toBe(1);
+  expect(coverage.trafficSampledMissingCount).toBe(1);
+  expect(coverage.actionableMissingCount).toBe(0);
+  expect(coverage.actionableMissingAccountIds).toEqual([]);
+  expect((coverage.accounts as Array<Record<string, unknown>>)[0].trafficSampled).toBe(true);
 });

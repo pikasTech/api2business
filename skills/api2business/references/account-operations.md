@@ -59,7 +59,7 @@
   `workflow status --id <workflow-id> --over-api <absolute-http(s)-URL>` 查询到终态，
   只有终态中的 `succeeded` 或明确的 `partial`/`failed` 才能作为轮次证据，不能把
   `submitted` 或 `running` 当作探活成功。
-- `accounts idle-probe coverage --scope <codex|claude|grok|deepseek> --window-minutes <N> --over-api <absolute-http(s)-URL>`
+- `accounts idle-probe coverage --scope <codex|claude|grok|deepseek|gemini> --window-minutes <N> --over-api <absolute-http(s)-URL>`
   只读核对指定作用域在窗口内的专用 Key 记录；省略作用域时使用 owning YAML 默认作用域。
 - 每个 `accounts idle-probe run` 轮次开始前必须回读共享 monitor-user 的实时余额；
   余额 `<= 0` 时按 `idleProbe.isolation.userBalance` 补到目标值，并把回读结果投影为

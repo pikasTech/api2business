@@ -243,7 +243,7 @@ test("template application verifies persisted runtime fields through the queued 
 
 test("template application skips a platform only when that platform has no rules", async () => {
   const source = await Bun.file(new URL("./upstream-management.ts", import.meta.url)).text();
-  expect(source).toContain("LOWER(a.platform) IN ('openai', 'anthropic', 'grok', 'deepseek', 'opencode_go')");
+  expect(source).toContain("LOWER(a.platform) IN ('openai', 'anthropic', 'grok', 'deepseek', 'opencode_go', 'gemini')");
   expect(source).toContain('reason: "platform-has-no-failover-template"');
   expect(source).toContain("skippedCount: skipped.length");
 });
@@ -457,5 +457,6 @@ test("keeps Codex and Claude templates as separate platform files", () => {
     grok: "config/failover-templates/grok.yaml",
     deepseek: "config/failover-templates/deepseek.yaml",
     opencode: "config/failover-templates/opencode.yaml",
+    gemini: "config/failover-templates/gemini.yaml",
   });
 });

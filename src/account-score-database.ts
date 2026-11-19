@@ -720,6 +720,8 @@ export async function collectRecentCallScoresFromDatabase(
       ? config.sub2api.grokScorePolicy
       : platform === "deepseek"
         ? (config.sub2api.deepseekScorePolicy ?? config.sub2api.scorePolicy)
+        : platform === "gemini"
+          ? (config.sub2api.geminiScorePolicy ?? config.sub2api.scorePolicy)
         : platform === "opencode_go"
           ? (config.sub2api.opencodeScorePolicy ?? config.sub2api.poolScorePolicy ?? config.sub2api.scorePolicy)
           : config.sub2api.scorePolicy;
@@ -727,6 +729,8 @@ export async function collectRecentCallScoresFromDatabase(
       ? config.sub2api.grokPriorityPlan
       : platform === "deepseek"
         ? (config.sub2api.deepseekPriorityPlan ?? config.sub2api.priorityPlan)
+        : platform === "gemini"
+          ? (config.sub2api.geminiPriorityPlan ?? config.sub2api.priorityPlan)
         : platform === "anthropic"
           ? (config.sub2api.claudePriorityPlan ?? config.sub2api.priorityPlan)
           : platform === "opencode_go"

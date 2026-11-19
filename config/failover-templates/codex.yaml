@@ -5,6 +5,11 @@ platform: openai
 rules:
 - errorCode: 404
   keywords:
+  - not available for this group
+  durationMinutes: 3
+  description: 上游明确返回模型不在当前分组可用范围时冷却该账号并切号
+- errorCode: 404
+  keywords:
   - The upstream service is temporarily unavailable, please try again later.
   durationMinutes: 3
   description: 上游真实404返回完整暂不可用正文时短暂冷却当前账号并切号
