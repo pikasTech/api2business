@@ -332,6 +332,34 @@ test("zero-sample accounts use 150 when every non-fixed account is already at th
   expect(plan.priorities).toMatchObject({ "521": 150, "522": 150 });
 });
 
+test("out-of-band initial priorities do not pollute the zero-sample warm start", () => {
+  const rows: Array<Record<string, any>> = [
+    { ...account(541, "scored", 96), platform: "opencode_go", groupIds: [191], priority: 1 },
+    { ...account(542, "new-a", 0), platform: "opencode_go", groupIds: [191], priority: 1 },
+    { ...account(543, "new-b", 0), platform: "opencode_go", groupIds: [191], priority: 1 },
+  ];
+  for (const row of rows.slice(1)) {
+    row.score = null;
+    row.observedAttempts = 0;
+    delete row.scoreComponents;
+  }
+  const plan = buildAccountPriorityPlan({ recentCallLimit: 1000, accounts: rows }, config);
+  const changes = (plan.changes as Array<Record<string, unknown>>)
+    .filter((row) => row.profile === "opencode");
+  const byAccount = new Map(changes.map((row) => [row.accountId, row]));
+
+  expect(byAccount.get(541)).toMatchObject({ desiredPriority: 100 });
+  expect(byAccount.get(542)).toMatchObject({
+    priorityMode: "zero-sample-fallback",
+    desiredPriority: 150,
+  });
+  expect(byAccount.get(543)).toMatchObject({
+    priorityMode: "zero-sample-fallback",
+    desiredPriority: 150,
+  });
+  expect(plan.priorities).toMatchObject({ "541": 100, "542": 150, "543": 150 });
+});
+
 test("zero-sample fallback also applies when cost weighting has no cost evidence", () => {
   const costConfig = structuredClone(config);
   costConfig.sub2api.priorityPlan.costWeight = 20;
