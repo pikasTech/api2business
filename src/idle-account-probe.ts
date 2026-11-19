@@ -693,7 +693,7 @@ export class IdleAccountProbeService {
               );
               response = attemptResponse;
               const attemptOk = attemptResponse.ordinaryLogRecorded === true && attemptResponse.qualityOk === true;
-              const status = Number(attemptResponse.httpStatus);
+              const status = attemptResponse.httpStatus == null ? Number.NaN : Number(attemptResponse.httpStatus);
               modelAttempts.push({
                 attempt: index + 1,
                 model: attemptModel,
