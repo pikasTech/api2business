@@ -260,6 +260,25 @@ test("idle probe request jitter includes both configured boundaries", () => {
   expect(idleProbeRequestJitterMs(1000, 3000, () => 0.999999)).toBe(3000);
 });
 
+test("idle probe keeps a missing http status as null in model attempts", async () => {
+  const isolation = {
+    get: () => ({ accountId: 369, groupId: 51, keyCreated: false }),
+    probe: async () => ({
+      classification: "error", answerClassification: "not_assessed", errorMarker: "request-timeout",
+      httpStatus: null, ordinaryLogRecorded: false, qualityOk: false,
+    }),
+  };
+  const service = new IdleAccountProbeService(config, reads([{
+    account_id: 369, account_name: "upstream plus 0.05", platform: "openai", priority: 300,
+    account_status: "active", schedulable: true, group_ids: [51],
+  }]), {} as never, isolation as never);
+  const result = await service.run([369], 1);
+  expect(result.failed).toBe(1);
+  expect((result.results as Array<Record<string, unknown>>)[0].modelAttempts).toMatchObject([
+    { httpStatus: null, errorMarker: "request-timeout" },
+  ]);
+});
+
 test("idle probe skips a concurrent round and uses the full per-account timeout", async () => {
   let calls = 0;
   let observedTimeoutMs = 0;
