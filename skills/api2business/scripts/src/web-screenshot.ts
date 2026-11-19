@@ -24,6 +24,7 @@ export function webScreenshotHelp(): Record<string, unknown> {
       "--manifest": "完整原始事件的绝对文件路径；父目录不存在时自动创建",
       "--selector": "settle 之后按 CSS 裁切元素；折下表格用它取景，不判定业务通过",
       "--click-selector": "等待前点击排序或分页控件；不能把折下区块留在视口内",
+      "--full-page": "采集完整页面高度；不展开页面内部的独立滚动容器",
       "--json": "结构化回执；Cookie 和 Secret 不输出",
     },
     evidence: "默认回执保留有界失败请求；retainedScreenshots 按 profile 和 scope 保留 PNG。截图与原始事件不自动判定业务成功",
@@ -43,6 +44,7 @@ export async function runWebScreenshot(
     burstInterval?: string | null; manifest?: string | null;
     clickSelector?: string | null;
     selector?: string | null;
+    fullPage?: boolean;
   },
   config: ReturnType<typeof loadConfig>,
   target: HttpCliTarget,
@@ -136,6 +138,7 @@ export async function runWebScreenshot(
       : ["--viewports", `${viewportValue},${mobileViewportValue}`]),
     ...(parsed.manifest ? ["--manifest", parsed.manifest] : []),
     ...webProbeElementArgs(parsed.clickSelector, parsed.selector),
+    ...(parsed.fullPage ? ["--full-page"] : []),
     "--settle-ms", String(settleMs),
     ...(Number.isSafeInteger(profile.commandTimeoutSeconds)
       ? ["--command-timeout-seconds", String(profile.commandTimeoutSeconds)] : []),

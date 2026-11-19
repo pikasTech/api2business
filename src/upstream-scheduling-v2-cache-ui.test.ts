@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { readdirSync } from "node:fs";
 
 const read = (path: string) => Bun.file(new URL(path, import.meta.url)).text();
 
@@ -57,8 +58,18 @@ describe("upstream scheduling v2 probe cache UI", () => {
       read("../static/app.js"),
     ]);
 
-    expect(html).toContain('/styles.css?v=probe-cache-ui-3');
-    expect(html).toContain('/app.js?v=probe-cache-ui-3');
-    expect(app).toContain("upstream-scheduling-v2.js?v=probe-cache-ui-3");
+    const styleRevision = /\/styles\.css\?v=([^"]+)/u.exec(html)?.[1];
+    const appRevision = /\/app\.js\?v=([^"]+)/u.exec(html)?.[1];
+    expect(styleRevision).toBeTruthy();
+    expect(appRevision).toBeTruthy();
+    expect(app).toContain(`upstream-scheduling-v2.js?v=${appRevision}`);
+
+    const pageNames = readdirSync(new URL("../static/", import.meta.url)).filter((name) => name.endsWith(".html"));
+    const pages = await Promise.all(pageNames.map((name) => read(`../static/${name}`)));
+    const pageRevisions = pages
+      .map((page) => /\/styles\.css\?v=([^"]+)/u.exec(page)?.[1])
+      .filter((revision): revision is string => Boolean(revision));
+    expect(pageRevisions.length).toBeGreaterThan(0);
+    expect(new Set(pageRevisions)).toEqual(new Set([styleRevision]));
   });
 });

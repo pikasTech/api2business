@@ -83,6 +83,7 @@ interface Parsed {
   manifest: string | null;
   clickSelector: string | null;
   selector: string | null;
+  fullPage: boolean;
   model: string | null;
   day: string | null;
   period: string | null;
@@ -217,7 +218,7 @@ export function parseArgs(args: string[]): Parsed {
   const configPath = value(args, "--config");
   if (!configPath) throw new Error("--config is required; run from the Api2Business repository root (where config/api2business.yaml exists) or pass --config <owning-YAML>");
   const optionNames = new Set(["--over-api", "--config", "--target", "--id", "--request-id", "--limit", "--top", "--draws", "--component", "--tail", "--calls", "--days", "--account", "--accounts", "--group", "--start", "--end", "--since", "--until", "--day", "--period", "--cost-cny", "--unit-cost-cny", "--amount-cny", "--direction", "--category", "--description", "--plan-type", "--scope", "--selection", "--profile", "--session-ttl-seconds", "--burst-count", "--burst-interval", "--manifest", "--click-selector", "--selector", "--model", "--file", "--output", "--priority", "--capacity", "--rate-multiplier", "--groups", "--proxy-id", "--external-costs-json", "--base-url", "--mode", "--account-id", "--stage", "--suffix", "--rate", "--recharge-cny", "--remaining-usd", "--rounds", "--window-minutes", "--page", "--search", "--product", "--quantity", "--format", "--hub-id", "--state", "--before-id", "--idempotency-key", "--platform", "--pool-mode", "--upstream-model"]);
-  const flags = new Set(["--confirm", "--include-records", "--json", "--cache-only", "--refresh", "--affected-only", "--api-key-stdin", "--template-only", "--ticket-stdin", "--code-stdin", "--card-code-stdin"]);
+  const flags = new Set(["--confirm", "--include-records", "--json", "--cache-only", "--refresh", "--affected-only", "--api-key-stdin", "--template-only", "--ticket-stdin", "--code-stdin", "--card-code-stdin", "--full-page"]);
   const command: string[] = [];
   for (let index = 0; index < args.length; index += 1) {
     const item = args[index]!;
@@ -293,6 +294,7 @@ export function parseArgs(args: string[]): Parsed {
     manifest: value(args, "--manifest"),
     clickSelector: value(args, "--click-selector"),
     selector: value(args, "--selector"),
+    fullPage: args.includes("--full-page"),
     model: value(args, "--model"),
     affectedOnly: args.includes("--affected-only"),
     file: value(args, "--file"), priority: integer("--priority"), capacity: integer("--capacity"),
@@ -357,7 +359,7 @@ function help(): Record<string, unknown> {
       "records list|delete",
       "credit test",
       "api smoke --over-api <absolute-http(s)-URL>",
-      "web screenshot [--profile <owning smoke profile>] [--scope <enabled scope>] [--selector <css>] [--click-selector <css>] [--session-ttl-seconds N] [--burst-count 1..30] [--burst-interval 200ms..10s] [--manifest <absolute path>] --over-api <absolute-http(s)-URL>",
+      "web screenshot [--profile <owning smoke profile>] [--scope <enabled scope>] [--selector <css>] [--click-selector <css>] [--full-page] [--session-ttl-seconds N] [--burst-count 1..30] [--burst-interval 200ms..10s] [--manifest <absolute path>] --over-api <absolute-http(s)-URL>",
       "workflow status --id <workflow-id>",
       "priority history --over-api <absolute-http(s)-URL> [--scope codex|claude|grok|deepseek|opencode|gemini] [--account <positive-id>]",
       "accounts import --file <json|ndjson|zip> --unit-cost-cny <CNY> [--plan-type k12|plus|team|free] [--priority 1 --capacity 3 --rate-multiplier 1000 --groups 2,3 --proxy-id 0] [--confirm] --over-api <absolute-http(s)-URL>",

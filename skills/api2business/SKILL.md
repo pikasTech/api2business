@@ -391,6 +391,9 @@ bun skills/api2business/scripts/api2business-cli.ts \
   - 静态表头先于脚本出现，过早点中不会改变排序；采集成功不代表点击生效。
   - 此参数在等待前点击，不能把展开后的折下表格留在视口内。
   - 此参数只辅助取景，是否符合验收目标仍须人工看图。
+- 长页排版验收使用 `--full-page` 采集完整页面高度。
+  - 它只展开页面主滚动，不展开表格等内部 `overflow:auto` 容器。
+  - 需要单独核对表内列宽时，再配合 `--selector` 取景。
 - 折下区块使用 `--selector <css>`，在 settle 之后裁切元素。
   - 选择器和投影规则见
     [上游与调度](references/upstream-scheduling.md#失败或误判模式)。
