@@ -123,6 +123,19 @@
 
 - DeepSeek、OpenCode 和 CommandCode 的 `modelSyncAutomation` 必须保持关闭。
   - 作用域平台命中 `automaticDisabledPlatforms` 且自动开关为真时，`config validate` 直接失败。
+
+### 恢复 OpenCode / CommandCode 作用域
+
+- `opencode` 使用 `opencode_go` 平台和业务分组 `191`；`commandcode` 使用 `command_code`
+  平台和业务分组 `193`。两者只恢复探活和优先级自动化，`modelSyncAutomation` 仍保持 `false`。
+- 两个作用域都必须显式声明 `idleProbeCacheMode: full`，并同时满足
+  `features.idleProbe=true` 和 `features.priorityAutomation=true`。
+  - `full` 表示探活必须携带完整固定缓存前缀，不允许被账号或平台的成本启发式降为 `compact`。
+  - 冷前缀、`compact` 前缀或没有缓存证据的轮次不得进入优先级自动化依据。
+- Go worker 必须按 owning YAML 为所有 `features.idleProbe=true` 的作用域注册周期探活，
+  不得再按平台白名单排除 `opencode_go`、`command_code`，也不得按作用域名硬编码禁用。
+- 恢复顺序固定为：更新规格 → 开启配置 → 部署 worker/API → 手动探活核对
+  `requestEvidence.cacheMode=full` → 打开或确认优先级自动化。
   - TypeScript worker 和 L1 实际使用的 Go worker 都从同一 YAML 读取禁用平台清单。
   - 两者在 Temporal 计划创建、自动轮次和只读 plan 再做一次防御性判断；即使绕过配置校验，
     也不得启动或保留自动同步。
@@ -362,7 +375,9 @@
   - 探活候选必须按作用域平台和分组查询，模型白名单动态选择
     `sub2api.idleProbe.platformModels` 中的候选；Codex 默认按 `gpt-6.1-sol`、
     以 owning YAML 的 `platformModels.openai` 顺序为准，首选 `gpt-6.1-sol`；Grok 使用自己的模型目录。
-    白名单必须按新到旧排列；Gemini 当前按 `gemini-4-argon`、`gemini-4-hydrogen`、
+    白名单必须按新到旧排列；OpenCode Go 按 `deepseek-v4.1-flash`、`glm-5.3`、`glm-5.2`、
+    `kimi-k3`、`hy3`；CommandCode 按 `deepseek/deepseek-v4.1-flash`、`gpt-6.1-sol`、
+    `gpt-6-sol`、`deepseek/deepseek-v4-pro`。Gemini 当前按 `gemini-4-argon`、`gemini-4-hydrogen`、
     `gemini-3.8-flash`、`gemini-3.1-pro-preview` 的优先顺序探活，不能把 `gemini-2.5-*`
     放在前面。账号存在 `model_mapping` 时，按白名单顺序选择第一个映射命中，不能按 jsonb
     键的原始顺序取第一个；没有任何映射，或映射存在但白名单全部不命中时，回退到该平台
@@ -380,6 +395,9 @@
   - 作用域探活的 plan/history 是实时读入口，必须绕过通用 API 响应缓存；缓存未刷新不能
     用“缓存尚未刷新”替代当前计划。探活记录必须持久化 `platform` 和 `ready` 状态；
     修复无平台的旧记录前，先回读原生账号平台，平台不匹配时拒绝归属。
+  - 作用域可显式声明 `idleProbeCacheMode: full|compact`，覆盖该作用域的账号/平台缓存启发式；
+    未声明时才由账号与平台缓存证据选择。声明为 `full` 的作用域不得在任何轮次退回 `compact`，
+    计划、轮次记录和 `requestEvidence` 都必须显示实际 `cacheMode`。
   - `in-flight` 跳过是轮次并发保护，不是探活业务失败；回执必须带同一作用域的
     `runningSince`、`runningForMs` 和续查提示，让调用方知道在等待哪一轮，而不是只看到 skip。
     轮次只有在计划中的未就绪账号不被
