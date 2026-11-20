@@ -715,7 +715,7 @@ export class ProbeIsolationService {
         throw new Error(`探活账号平台识别阶段失败：${errorMessage(error)}`);
       }
       const platform = String(account.platform ?? "").toLowerCase();
-      if (platform !== "openai" && platform !== "anthropic" && platform !== "grok" && platform !== "deepseek" && platform !== "gemini") {
+      if (platform !== "openai" && platform !== "anthropic" && platform !== "grok" && platform !== "deepseek" && platform !== "opencode_go" && platform !== "command_code" && platform !== "gemini") {
         throw new Error(`账号 ${accountId} 缺少受支持的平台，不能创建探活隔离`);
       }
       if (scope && scope.platform !== platform) throw new Error(`账号 ${accountId} 的实际平台与探活作用域不一致`);
