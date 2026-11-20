@@ -216,6 +216,21 @@ test("probe isolation detects Grok platform without adding Codex groups", async 
   expect(secret.records["42"]).toMatchObject({ platform: "grok", ready: true });
 });
 
+test.each([
+  ["opencode_go", 191],
+  ["command_code", 193],
+] as const)("probe isolation accepts the %s probe platform", async (platform, groupId) => {
+  const { rootDirectory, state, service } = fixture();
+  state.account = { id: 42, platform, type: "apikey", group_ids: [groupId] };
+
+  await service.ensure(42, { platform, eligibleGroupIds: [groupId], bindingGroupIds: [] });
+
+  expect(state.groupCreates[0]).toEqual(expect.objectContaining({ platform }));
+  expect(state.accountUpdates).toEqual([expect.objectContaining({ group_ids: [51, groupId] })]);
+  const secret = JSON.parse(readFileSync(join(rootDirectory, ".state/idle-probe/probe-keys.json"), "utf8")) as { records: Record<string, Row> };
+  expect(secret.records["42"]).toMatchObject({ platform, ready: true });
+});
+
 test("DeepSeek probe uses Chat Completions and the configured probe model", async () => {
   const { state, service } = fixture();
   state.account = { id: 42, platform: "deepseek", type: "apikey", group_ids: [131] };
