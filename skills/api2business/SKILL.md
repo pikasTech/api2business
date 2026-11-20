@@ -185,6 +185,8 @@ bun skills/api2business/scripts/api2business-cli.ts --config config/api2business
   - `--platform` 接受同一组作用域名；与 `--scope` 冲突或写成供应商名时直接失败。
   - 账号评分快照使用 `scores get`，
   需要刷新时使用 `scores rank --calls <N> --over-api <absolute-http(s)-URL>`。
+  - `--calls` 只接受 owning YAML `monitor.recentCallOptions` 中的值（默认 100/500/1000/2000/5000）；
+    其他整数返回 400，`GET /api/scores` 的 `availableCallOptions` 给出当前允许值。
   - 人类评分表同时给出窗口失败率、突发失败率和有效失败率。
   - 只看窗口失败率不能判断可靠性分项是否已经为零。
 - 单账号优先级前后变化使用
