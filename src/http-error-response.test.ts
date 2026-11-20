@@ -21,6 +21,13 @@ describe("management selector errors", () => {
     expect(result.status).toBe(409);
     expect(result.body).toEqual({ ok: false, error: "group selector resolved no scoreable accounts: empty" });
   });
+
+  test("maps a disallowed recentCallLimit to an actionable 400 instead of a generic 500", async () => {
+    const message = "recentCallLimit must be one of: 100, 500, 1000, 2000, 5000";
+    const result = await errorStatus(new Error(message));
+    expect(result.status).toBe(400);
+    expect(result.body).toEqual({ ok: false, error: message });
+  });
 });
 
 describe("request body parsing", () => {

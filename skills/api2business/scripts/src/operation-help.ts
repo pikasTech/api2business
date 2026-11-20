@@ -192,7 +192,7 @@ export function scoreRankHelp(): Record<string, unknown> {
     options: {
       "--config": configOption,
       "--over-api": overApiOption,
-      "--calls": "可选；非负整数，覆盖本窗口最近调用样本上限；省略时读取 owning YAML 的 monitor.recentCallLimit",
+      "--calls": "可选；必须是 owning YAML monitor.recentCallOptions 中的值（默认 100/500/1000/2000/5000），覆盖本窗口最近调用样本上限；省略时读取 monitor.recentCallLimit",
       "--account": "可选；只读取一个账号，接受正整数 ID 或精确账号名",
       "--group": "可选；只读取一个业务分组，接受正整数 ID 或精确分组名",
       "--json": jsonOption,
