@@ -67,6 +67,38 @@ describe("upstream scheduling v2 platform validation", () => {
       priorityAutomation: true,
     });
   });
+
+  test("loads cached idle-probe scopes for opencode and commandcode", () => {
+    const config = loadConfig(join(configDir, "api2business.example.yaml"));
+    expect(config.operations.upstreamSchedulingV2?.scopes.opencode).toMatchObject({
+      platform: "opencode_go",
+      eligibleGroupIds: [191],
+      idleProbeCacheMode: "full",
+      features: { idleProbe: true, priorityAutomation: true, modelSyncAutomation: false },
+    });
+    expect(config.operations.upstreamSchedulingV2?.scopes.commandcode).toMatchObject({
+      platform: "command_code",
+      eligibleGroupIds: [193],
+      idleProbeCacheMode: "full",
+      features: { idleProbe: true, priorityAutomation: true, modelSyncAutomation: false },
+    });
+    expect(config.sub2api.idleProbe.platformModels?.opencode_go?.slice(0, 3)).toEqual([
+      "deepseek-v4.1-flash", "glm-5.3", "glm-5.2",
+    ]);
+    expect(config.sub2api.idleProbe.platformModels?.command_code?.slice(0, 3)).toEqual([
+      "deepseek/deepseek-v4.1-flash", "gpt-6.1-sol", "gpt-6-sol",
+    ]);
+  });
+
+  test("validates idleProbeCacheMode values", () => {
+    const config = loadExampleWithMutation((raw) => {
+      raw.operations.upstreamSchedulingV2.scopes.codex.idleProbeCacheMode = "compact";
+    });
+    expect(config.operations.upstreamSchedulingV2?.scopes.codex.idleProbeCacheMode).toBe("compact");
+    expect(() => loadExampleWithMutation((raw) => {
+      raw.operations.upstreamSchedulingV2.scopes.codex.idleProbeCacheMode = "bypass";
+    })).toThrow("operations.upstreamSchedulingV2.scopes.codex.idleProbeCacheMode must be full or compact");
+  });
 });
 
 describe("model sync policy validation", () => {

@@ -36,9 +36,6 @@ func (a Activities) ExecuteOperation(ctx context.Context, operation OperationReq
 }
 
 func (a Activities) executeOperationHTTP(ctx context.Context, operation OperationRequest) (any, error) {
-	if scope := prohibitedIdleProbeScope(operation); scope != "" {
-		return nil, fmt.Errorf("idle probe is prohibited for scope %s", scope)
-	}
 	if scope := prohibitedModelSyncScope(operation, a.cfg); scope != "" {
 		return nil, fmt.Errorf("model sync automation is prohibited for scope %s", scope)
 	}
@@ -73,18 +70,6 @@ func (a Activities) executeOperationHTTP(ctx context.Context, operation Operatio
 		return nil, errors.New("worker operation identity mismatch")
 	}
 	return envelope.Result, nil
-}
-
-func prohibitedIdleProbeScope(operation OperationRequest) string {
-	if operation.Command == nil {
-		return ""
-	}
-	kind, _ := operation.Command["kind"].(string)
-	scope, _ := operation.Command["scope"].(string)
-	if kind == "account.idle-probe.run" && scope == "opencode" {
-		return scope
-	}
-	return ""
 }
 
 func prohibitedModelSyncScope(operation OperationRequest, cfg Config) string {

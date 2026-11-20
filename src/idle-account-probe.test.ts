@@ -616,6 +616,41 @@ test("cache mode uses platform evidence without sacrificing an observed hit", ()
   expect(selectProbeCacheMode(Number.NaN, 0, 0)).toBe("compact");
 });
 
+test("scope idleProbeCacheMode overrides cache heuristics for plan and run", async () => {
+  const scopedConfig = {
+    ...config,
+    operations: {
+      upstreamSchedulingV2: {
+        enabled: true,
+        scopes: {
+          claude: {
+            enabled: true, platform: "anthropic", eligibleGroupIds: [101],
+            idleProbeCacheMode: "full", features: { idleProbe: true },
+          },
+        },
+      },
+    },
+  } as unknown as AppConfig;
+  const rows = [{
+    account_id: 1, account_name: "cached", platform: "anthropic", priority: 300, account_status: "active",
+    schedulable: true, group_ids: [101], cache_known_samples: 20, cache_hit_samples: 0,
+    platform_cache_hit_samples: 0,
+  }];
+  const modes: string[] = [];
+  const isolation = {
+    get: (accountId: number) => ({ accountId, groupId: 101, keyCreated: false }),
+    probe: async (_accountId: number, _model: string, _timeout: number, _reasoning: string, mode: string) => {
+      modes.push(mode);
+      return { classification: "alive", ordinaryLogRecorded: true, qualityOk: true, cacheMode: mode };
+    },
+  };
+  const service = new IdleAccountProbeService(scopedConfig, reads(rows), {} as never, isolation as never);
+  const plan = await service.plan([], "manual", "claude");
+  expect((plan.candidates as Array<Record<string, unknown>>)[0]).toMatchObject({ accountId: 1, probeCacheMode: "full" });
+  expect(await service.run([], 1, "claude")).toMatchObject({ attempted: 1, succeeded: 1 });
+  expect(modes).toEqual(["full"]);
+});
+
 test("cache evidence SQL is account-scoped, 24 hours, and counts only explicit cache fields", () => {
   expect(idleProbeCandidatesSql).toContain("cache_known_samples");
   expect(idleProbeCandidatesSql).toContain("cache_hit_samples");

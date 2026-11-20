@@ -37,6 +37,7 @@ operations:
       grok: { enabled: true, platform: grok, features: { priorityAutomation: true, idleProbe: true } }
       deepseek: { enabled: true, platform: deepseek, features: { priorityAutomation: true, idleProbe: true, modelSyncAutomation: true } }
       opencode: { enabled: true, platform: opencode_go, features: { priorityAutomation: true, idleProbe: true, modelSyncAutomation: true } }
+      commandcode: { enabled: true, platform: command_code, features: { priorityAutomation: true, idleProbe: true, modelSyncAutomation: false } }
       gemini: { enabled: true, platform: gemini, features: { priorityAutomation: true, idleProbe: true, modelSyncAutomation: true } }
   upstreamManagement: { quotaSampleIntervalSeconds: 300, quotaSampleTimeoutSeconds: 240 }
 temporal:
@@ -72,8 +73,8 @@ runtime:
 	if !cfg.AutomaticRefreshEnabled || cfg.V2AutomationIntervalSeconds != 120 || cfg.V2AutomationRecentCallLimit != 1000 {
 		t.Fatalf("missing periodic worker config: %#v", cfg)
 	}
-	if strings.Join(cfg.V2IdleProbeScopes, ",") != "claude,codex,deepseek,gemini,grok" {
-		t.Fatalf("expected Claude, Codex, DeepSeek, Gemini and Grok idle probe scopes, got %#v", cfg.V2IdleProbeScopes)
+	if strings.Join(cfg.V2IdleProbeScopes, ",") != "claude,codex,commandcode,deepseek,gemini,grok,opencode" {
+		t.Fatalf("expected every enabled idle probe scope including command_code and opencode_go, got %#v", cfg.V2IdleProbeScopes)
 	}
 	if cfg.V2IdleProbeIntervals["codex"] != 60 || cfg.V2IdleProbeIntervals["claude"] != 300 || cfg.V2IdleProbeIntervals["grok"] != 60 {
 		t.Fatalf("unexpected scoped idle probe intervals: %#v", cfg.V2IdleProbeIntervals)
@@ -246,23 +247,25 @@ func TestExecuteOperationRejectsIdentityMismatch(t *testing.T) {
 	}
 }
 
-func TestExecuteOperationRejectsOpenCodeIdleProbe(t *testing.T) {
-	called := false
-	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
-		called = true
-		_ = json.NewEncoder(response).Encode(map[string]any{"ok": true, "operationId": "blocked", "result": nil})
-	}))
-	defer server.Close()
-	activity := Activities{cfg: Config{APIBaseURL: server.URL}, http: server.Client()}
-	_, err := activity.executeOperationHTTP(context.Background(), OperationRequest{
-		OperationID: "blocked",
-		Command:     map[string]any{"kind": "account.idle-probe.run", "scope": "opencode"},
-	})
-	if err == nil || !strings.Contains(err.Error(), "prohibited") {
-		t.Fatalf("expected opencode idle probe prohibition, got %v", err)
-	}
-	if called {
-		t.Fatal("opencode idle probe must not reach the API")
+func TestExecuteOperationAllowsRestoredIdleProbeScopes(t *testing.T) {
+	for _, scope := range []string{"opencode", "commandcode"} {
+		called := false
+		server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
+			called = true
+			_ = json.NewEncoder(response).Encode(map[string]any{"ok": true, "operationId": "allowed", "result": nil})
+		}))
+		activity := Activities{cfg: Config{APIBaseURL: server.URL}, http: server.Client()}
+		_, err := activity.executeOperationHTTP(context.Background(), OperationRequest{
+			OperationID: "allowed",
+			Command:     map[string]any{"kind": "account.idle-probe.run", "scope": scope},
+		})
+		server.Close()
+		if err != nil {
+			t.Fatalf("expected %s idle probe to reach the API, got %v", scope, err)
+		}
+		if !called {
+			t.Fatalf("%s idle probe must reach the API", scope)
+		}
 	}
 }
 

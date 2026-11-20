@@ -230,6 +230,8 @@ sub2api:
       anthropic: [ claude-sonnet-5-5 ]
       grok: [ grok-4.5 ]
       deepseek: [ deepseek-flash ]
+      opencode_go: [ deepseek-v4.1-flash, glm-5.3, glm-5.2, kimi-k3, hy3 ]
+      command_code: [ deepseek/deepseek-v4.1-flash, gpt-6.1-sol, gpt-6-sol, deepseek/deepseek-v4-pro ]
       # 按新到旧排列；映射存在时按此顺序命中，映射为空或全不命中时回退首项。
       gemini: [ gemini-4-argon, gemini-4-hydrogen, gemini-3.8-flash, gemini-3.1-pro-preview, gemini-3-pro-preview, gemini-2.5-pro, gemini-2.5-flash ]
     reasoningEffort: low
@@ -586,6 +588,34 @@ operations:
         platform: deepseek
         eligibleGroupIds: [ 131 ]
         idleProbeIntervalSeconds: 90
+        features:
+          scoreRead: true
+          planRead: true
+          planWrite: false
+          priorityAutomation: true
+          idleProbe: true
+          upstreamWrite: false
+          modelSyncAutomation: false
+      opencode:
+        enabled: true
+        platform: opencode_go
+        eligibleGroupIds: [ 191 ]
+        idleProbeIntervalSeconds: 180
+        idleProbeCacheMode: full
+        features:
+          scoreRead: true
+          planRead: true
+          planWrite: false
+          priorityAutomation: true
+          idleProbe: true
+          upstreamWrite: false
+          modelSyncAutomation: false
+      commandcode:
+        enabled: true
+        platform: command_code
+        eligibleGroupIds: [ 193 ]
+        idleProbeIntervalSeconds: 180
+        idleProbeCacheMode: full
         features:
           scoreRead: true
           planRead: true

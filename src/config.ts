@@ -185,6 +185,7 @@ export interface UpstreamSchedulingV2Scope {
   platform: "openai" | "anthropic" | "grok" | "deepseek" | "opencode_go" | "command_code" | "gemini";
   eligibleGroupIds: number[];
   idleProbeIntervalSeconds?: number;
+  idleProbeCacheMode?: "full" | "compact";
   features: UpstreamSchedulingV2Features;
 }
 
@@ -705,6 +706,12 @@ function readUpstreamSchedulingV2(value: unknown, path: string): UpstreamSchedul
     }
     const eligibleGroupIds = integers(scope, "eligibleGroupIds", scopePath, 1, Number.MAX_SAFE_INTEGER);
     if (eligibleGroupIds.length === 0) throw new Error(`${scopePath}.eligibleGroupIds must not be empty`);
+    const idleProbeCacheMode = scope.idleProbeCacheMode === undefined
+      ? undefined
+      : stringValue(scope, "idleProbeCacheMode", scopePath).trim();
+    if (idleProbeCacheMode !== undefined && idleProbeCacheMode !== "full" && idleProbeCacheMode !== "compact") {
+      throw new Error(`${scopePath}.idleProbeCacheMode must be full or compact`);
+    }
     scopes[name] = {
       enabled: booleanValue(scope, "enabled", scopePath),
       platform: platform as UpstreamSchedulingV2Scope["platform"],
@@ -712,6 +719,7 @@ function readUpstreamSchedulingV2(value: unknown, path: string): UpstreamSchedul
       ...(scope.idleProbeIntervalSeconds === undefined
         ? {}
         : { idleProbeIntervalSeconds: integerValue(scope, "idleProbeIntervalSeconds", scopePath, 10, 3600) }),
+      ...(idleProbeCacheMode === undefined ? {} : { idleProbeCacheMode }),
       features: {
         scoreRead: booleanValue(features, "scoreRead", `${scopePath}.features`),
         planRead: booleanValue(features, "planRead", `${scopePath}.features`),
