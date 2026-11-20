@@ -24,6 +24,7 @@ import { parseCompletedProfitDay } from "./daily-profit-facts";
 import { normalizeExternalAccountCosts } from "./account-import-economics";
 import { projectSharedWalletUsageRows } from "./upstream-wallet";
 import { createHash } from "node:crypto";
+import { createLoginThrottle, type LoginThrottle } from "./login-throttle";
 import {
   apiKeyAuthorized,
   clearSessionCookie,
@@ -145,6 +146,38 @@ function redirect(location: string): Response {
   return new Response(null, { status: 302, headers: { location, "cache-control": "no-store" } });
 }
 
+export interface LoginAttemptResult {
+  ok: boolean;
+  status: number;
+  error?: string;
+  headers?: Record<string, string>;
+}
+
+// Credential verification runs first so a correct password is never locked out by
+// an attacker's failed attempts; the throttle only slows down wrong guesses.
+export function authorizeLoginAttempt(
+  username: unknown,
+  password: unknown,
+  config: AppConfig,
+  auth: WebAuthSecrets,
+  throttle: LoginThrottle,
+): LoginAttemptResult {
+  if (validLogin(username, password, config, auth)) {
+    throttle.recordSuccess();
+    return { ok: true, status: 200 };
+  }
+  throttle.recordFailure();
+  if (throttle.isBlocked()) {
+    return {
+      ok: false,
+      status: 429,
+      error: "登录失败次数过多，请稍后再试",
+      headers: { "retry-after": String(throttle.retryAfterSeconds()) },
+    };
+  }
+  return { ok: false, status: 401, error: "用户名或密码错误" };
+}
+
 export function parseJsonObjectBody(text: string): Record<string, unknown> {
   if (!text.trim()) return {};
   let parsed: unknown;
@@ -246,6 +279,7 @@ export function createHandler(
   executeWorkerOperation?: (operation: OperationRequest) => Promise<unknown>,
   upstreamSchedulingV2?: UpstreamSchedulingV2Service,
   observability?: OperationalObservability,
+  loginThrottle: LoginThrottle = createLoginThrottle(),
 ): (request: Request) => Promise<Response> {
   const cacheKey = (request: Request) => createHash("sha256").update(`${request.method} ${new URL(request.url).pathname}${new URL(request.url).search}`).digest("hex");
   const cacheRefreshes = new Map<string, Promise<ApiCacheRefreshResult>>();
@@ -269,8 +303,11 @@ export function createHandler(
       }
       if (request.method === "POST" && url.pathname === "/api/login") {
         const input = await body(request);
-        if (!validLogin(input.username, input.password, config, auth)) return json({ ok: false, error: "用户名或密码错误" }, 401);
-        return json({ ok: true, username: config.webAuth.username }, 200, { "set-cookie": createSessionCookie(config, auth, secureCookies) });
+        const attempt = authorizeLoginAttempt(input.username, input.password, config, auth, loginThrottle);
+        if (attempt.ok) {
+          return json({ ok: true, username: config.webAuth.username }, 200, { "set-cookie": createSessionCookie(config, auth, secureCookies) });
+        }
+        return json({ ok: false, error: attempt.error }, attempt.status, attempt.headers);
       }
       if (request.method === "POST" && url.pathname === "/api/logout") {
         return json({ ok: true }, 200, { "set-cookie": clearSessionCookie(config, secureCookies) });
