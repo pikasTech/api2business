@@ -12,6 +12,19 @@
   - Sub2API 原生接口负责账号和上游的实际写入。
 - Codex、Claude、Grok、DeepSeek 和 Gemini 是平等作用域；作用域之间不得通过历史标签、URL 或混池结果
   互相推断账号归属。
+- 转接 API-key 上游的池模式与临时调度策略唯一由
+  `operations.upstreamManagement.convertedApiKeyPolicy` 声明，语义和配置合同只在本节定义。
+  - 匹配条件是账号 `platform` 属于 `platforms` 且规范化后的 `base_url` 属于 `baseUrls`；
+    两个条件必须同时满足，不按账号名、供应商历史或作用域标签推断。
+  - 命中账号的 `pool_mode`、`temp_unschedulable_enabled` 和临时规则必须分别等于
+    `poolMode`、`tempUnschedulableEnabled` 与启用时的平台模板规则；该策略关闭临时调度时，
+    规则必须为空数组。
+  - 策略适用于创建、更新、模型费率同步、探活隔离、初始化、模板全量同步、写后回读和自动运维修复。
+    没有显式 credentials 的改名、分组或费率更新不得借此重写模板字段。
+  - `opencode 转 DS` 与 `commandcode 转 DS` 是当前实例，不是按名称维护的例外；未来同类账号只要命中
+    owning YAML 的平台与地址交集，就适用同一策略。
+  - owning YAML 是该策略唯一的值来源；代码只负责匹配、写入和回读，skill、自动任务提示词和
+    UI 文档只交叉引用本节，不复制第二套规则。
 - 账号创建、分组、并发、优先级、成本和切号模板必须按平台作用域收口。
   - Codex、Claude、Grok、DeepSeek、OpenCode 与 Gemini 各自使用独立模板文件，禁止跨平台套用。
 - 每个新上游在同一创建作业中完成同平台切号模板、私有探活绑定和手动探活。

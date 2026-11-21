@@ -41,6 +41,10 @@
 - 每个平台使用自己的模板；禁止把 Codex 或 Claude 模板套到 Grok。
   - Grok 规则只来自 `config/failover-templates/grok.yaml`。
   - 多个平台同时更新时，分别选择全量账号、提交作业并核验，不能混成同一模板。
+- 命中 `operations.upstreamManagement.convertedApiKeyPolicy` 的转接 API-key 上游是平台模板例外。
+  - 匹配条件、池模式、临时调度和全部写入/回读合同唯一见
+    [转接 API-key 上游策略](../../../docs/specs/upstream-management.md#转接-api-key-上游策略)。
+  - 本参考不按账号名、供应商历史或“CommandCode/OpenCode”名称另造规则。
 - 执行入口见[项目技能](../SKILL.md#领域操作)。
   - 通过排队 broker 按平台与账号类型取得完整 ID 集合，不依赖列表首页或 owning 分组过滤。
   - 用完整集合传入 `upstreams template --accounts`，先查看计划，再确认提交。
@@ -967,6 +971,8 @@
 - 每个新上游都要配置并核验同平台切号模板及私有探活绑定。
   - 模板仅由 `operations.upstreamManagement.templateFiles` 声明。
   - OpenAI、Anthropic、Grok、DeepSeek、OpenCode 和 Gemini 各自使用同平台模板。
+  - 转接 API-key 上游的 pool mode 与临时调度例外只见
+    [转接 API-key 上游策略](../../../docs/specs/upstream-management.md#转接-api-key-上游策略)。
   - Codex API-key 额外写入 `extra.openai_responses_mode=force_responses`。
   - DeepSeek 与 Gemini API-key 的探活 transport 固定为 Chat Completions。
   - 其他平台不写该字段；Responses 调用成功不能替代强制模式的字段回读。

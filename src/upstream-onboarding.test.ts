@@ -71,10 +71,43 @@ test("one account failing initialization does not hide the other platform result
   expect(result.accounts[0]?.accountId).toBe(10);
 });
 
+test("initialization applies the converted API-key policy to DeepSeek relay accounts", async () => {
+  const config = loadConfig("config/api2business.example.yaml");
+  const patches: Array<{ ids: number[]; patch: Row; platform?: string }> = [];
+  const reads = { async query<T extends Row>(request: Sub2ApiReadRequest): Promise<Sub2ApiReadResult<T>> {
+    const rows = request.kind.endsWith("targets")
+      ? [{ id: "1554", platform: "deepseek", base_url: "https://sub.api2business.com",
+        pool_mode: false, temp_enabled: true,
+        temp_rules: config.operations.upstreamManagement.failoverRulesByPlatform.deepseek,
+        group_ids: ["131"] }]
+      : [{ id: "1554", platform: "deepseek", pool_mode: true, temp_enabled: false, temp_rules: [],
+        responses_mode: null, group_ids: ["131", "2192"], is_exclusive: true,
+        probe_group_status: "active", member_count: "1" }];
+    return { rows: rows as unknown as T[], cached: false, deduplicated: false,
+      queueDurationMs: 0, queryDurationMs: 0, totalDurationMs: 0, queryStartedAt: "", queryCompletedAt: "" };
+  } };
+  const runtime = { async configureApiKeyAccounts(ids: number[], patch: Row, _timeout?: number, platform?: string) {
+    patches.push({ ids, patch, platform });
+    return { ok: true };
+  } };
+  const result = await initializeUpstreams(config, reads, runtime, {
+    ensure: async (accountId) => ({ accountId, groupId: 2192, keyCreated: false }),
+  }, [1554]);
+
+  expect(result).toMatchObject({ ok: true, verifiedCount: 1, failedCount: 0 });
+  expect(result.accounts[0]).toMatchObject({ convertedApiKeyPolicy: true, templateVerified: true });
+  expect(patches[0]).toMatchObject({
+    ids: [1554],
+    platform: "deepseek",
+    patch: { credentials: { pool_mode: true, temp_unschedulable_enabled: false, temp_unschedulable_rules: [] } },
+  });
+});
+
 test("in-flight skip is visible and never counts as verified probe", async () => {
   const initialized: OnboardingResult = { ok: true, operation: "initialize", targetCount: 1, verifiedCount: 1,
     failedCount: 0, accounts: [{ accountId: 10, platform: "openai", scope: "codex", automaticProbeEnabled: true,
-      ok: true, templateVerified: true, responsesMode: "force_responses", responsesVerified: true, probeReady: true, groupId: 200 }] };
+      ok: true, convertedApiKeyPolicy: false, templateVerified: true, responsesMode: "force_responses",
+      responsesVerified: true, probeReady: true, groupId: 200 }] };
   const result = await verifyOnboardingProbes(initialized, {
     runIdleProbe: async () => ({ ok: true, skipped: true, reason: "in-flight" }),
   }, "operation");

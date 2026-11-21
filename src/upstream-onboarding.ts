@@ -3,6 +3,7 @@ import type { ProbeIsolationService } from "./probe-isolation";
 import type { Sub2ApiReadClient } from "./sub2api-read-executor";
 import type { Sub2ApiRuntimeService } from "./sub2api-runtime-service";
 import type { OperationsService } from "./operations-service";
+import { apiKeyTemplatePolicy } from "./converted-api-key-policy";
 
 type Row = Record<string, unknown>;
 type Platform = "openai" | "anthropic" | "grok" | "deepseek" | "gemini";
@@ -27,6 +28,7 @@ export interface OnboardingAccount {
   scope: string | null;
   automaticProbeEnabled: boolean;
   ok: boolean;
+  convertedApiKeyPolicy: boolean;
   templateVerified: boolean;
   responsesMode: string | null;
   responsesVerified: boolean;
@@ -55,7 +57,8 @@ export async function initializeUpstreams(
   const targets = await reads.query<Row>({
     key: `upstream-initialize-targets:${ids.join(",")}`, kind: "upstream-initialize-targets",
     priority: "manual", cacheMode: "bypass-cache",
-    sql: `SELECT a.id, a.platform,
+    sql: `SELECT a.id, a.platform, a.credentials->>'base_url' AS base_url,
+        COALESCE((a.credentials->>'pool_mode')::boolean, false) AS pool_mode,
         a.credentials->'temp_unschedulable_enabled' AS temp_enabled,
         a.credentials->'temp_unschedulable_rules' AS temp_rules,
         a.extra->>'openai_responses_mode' AS responses_mode,
@@ -67,6 +70,7 @@ export async function initializeUpstreams(
   if (targets.rows.length !== ids.length) throw new Error("部分账号不存在或不是 API-key 上游；未执行初始化");
   const selected = targets.rows.map((row) => ({
     id: Number(row.id), platform: platform(row.platform),
+    baseUrl: String(row.base_url ?? ""), poolMode: row.pool_mode === true,
     groupIds: Array.isArray(row.group_ids) ? row.group_ids.map(Number) : [],
     tempEnabled: row.temp_enabled, tempRules: row.temp_rules, responsesMode: row.responses_mode,
   }));
@@ -78,16 +82,29 @@ export async function initializeUpstreams(
       accountId: target.id, platform: target.platform, scope: scope?.[0] ?? null,
       automaticProbeEnabled: config.operations.upstreamSchedulingV2?.enabled === true
         && scope?.[1].enabled === true && scope[1].features.idleProbe === true,
-      ok: false, templateVerified: false, responsesMode: null,
+      ok: false, convertedApiKeyPolicy: false, templateVerified: false, responsesMode: null,
       responsesVerified: target.platform !== "openai", probeReady: false, groupId: null,
     };
     try {
       const rules = config.operations.upstreamManagement.failoverRulesByPlatform[target.platform];
       if (!rules.length) throw new Error("目标平台没有切号模板");
-      if (target.tempEnabled !== true || canonical(target.tempRules) !== canonical(rules)
+      const templatePolicy = apiKeyTemplatePolicy(
+        config.operations.upstreamManagement.convertedApiKeyPolicy,
+        target.platform,
+        target.baseUrl,
+        rules,
+      );
+      item.convertedApiKeyPolicy = templatePolicy.converted;
+      if (target.tempEnabled !== templatePolicy.tempUnschedulableEnabled
+        || canonical(target.tempRules) !== canonical(templatePolicy.rules)
+        || templatePolicy.converted && target.poolMode !== templatePolicy.poolMode
         || target.platform === "openai" && target.responsesMode !== "force_responses") {
         await runtime.configureApiKeyAccounts([target.id], {
-          credentials: { temp_unschedulable_enabled: true, temp_unschedulable_rules: rules },
+          credentials: {
+            ...(templatePolicy.converted && templatePolicy.poolMode !== undefined ? { pool_mode: templatePolicy.poolMode } : {}),
+            temp_unschedulable_enabled: templatePolicy.tempUnschedulableEnabled,
+            temp_unschedulable_rules: templatePolicy.rules,
+          },
           ...(target.platform === "openai" ? { extra: { openai_responses_mode: "force_responses" } } : {}),
         }, config.operations.upstreamManagement.mutationTimeoutMs, target.platform);
       }
@@ -98,7 +115,8 @@ export async function initializeUpstreams(
       const verified = await reads.query<Row>({
         key: `upstream-initialize-verify:${target.id}`, kind: "upstream-initialize-verify",
         priority: "manual", cacheMode: "bypass-cache",
-        sql: `SELECT a.platform, a.credentials->'temp_unschedulable_enabled' AS temp_enabled,
+        sql: `SELECT a.platform, COALESCE((a.credentials->>'pool_mode')::boolean, false) AS pool_mode,
+            a.credentials->'temp_unschedulable_enabled' AS temp_enabled,
             a.credentials->'temp_unschedulable_rules' AS temp_rules,
             a.extra->>'openai_responses_mode' AS responses_mode,
             ARRAY(SELECT group_id FROM account_groups WHERE account_id=a.id ORDER BY group_id) AS group_ids,
@@ -111,7 +129,9 @@ export async function initializeUpstreams(
       const row = verified.rows[0];
       const groups = Array.isArray(row?.group_ids) ? row.group_ids.map(Number).sort((a, b) => a - b) : [];
       const expectedGroups = [...new Set([...target.groupIds, binding.groupId])].sort((a, b) => a - b);
-      item.templateVerified = row?.temp_enabled === true && canonical(row.temp_rules) === canonical(rules);
+      item.templateVerified = row?.temp_enabled === templatePolicy.tempUnschedulableEnabled
+        && canonical(row.temp_rules) === canonical(templatePolicy.rules)
+        && (!templatePolicy.converted || row.pool_mode === templatePolicy.poolMode);
       item.responsesMode = typeof row?.responses_mode === "string" ? row.responses_mode : null;
       item.responsesVerified = target.platform !== "openai" || item.responsesMode === "force_responses";
       item.probeReady = row?.is_exclusive === true && row.probe_group_status === "active"

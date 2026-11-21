@@ -26,6 +26,7 @@ import { providerActualCostUsd, upstreamCostBasisSql } from "./upstream-cost-sql
 import { summarizeQuotaProviderCoverage, summarizeQuotaWindowCoverage } from "./upstream-usage";
 import { configuredWalletKey } from "./upstream-wallet";
 import { initializeUpstreams } from "./upstream-onboarding";
+import { apiKeyTemplatePolicy } from "./converted-api-key-policy";
 
 type Row = Record<string, unknown>;
 
@@ -1270,7 +1271,7 @@ export class UpstreamManagementService {
       kind: "upstream-template-targets",
       priority: "manual",
       cacheMode: "bypass-cache",
-      sql: `SELECT a.id, a.platform
+      sql: `SELECT a.id, a.platform, a.credentials->>'base_url' AS base_url
         FROM accounts a
         WHERE a.deleted_at IS NULL
           AND LOWER(a.type) = 'apikey'
@@ -1283,7 +1284,11 @@ export class UpstreamManagementService {
     const skipped: Array<{ accountId: number; platform: string; reason: string }> = [];
     const ids: number[] = [];
     const failed: Array<{ accountId: number; error: string }> = [];
-    const platformGroups = new Map<string, number[]>();
+    const templateGroups = new Map<string, {
+      platform: string;
+      policy: ReturnType<typeof apiKeyTemplatePolicy>;
+      accountIds: number[];
+    }>();
     for (const row of query.rows) {
       const accountId = Number(row.id);
       const platform = String(row.platform ?? "").toLowerCase();
@@ -1294,17 +1299,25 @@ export class UpstreamManagementService {
         continue;
       }
       ids.push(accountId);
-      const group = platformGroups.get(platform) ?? [];
-      group.push(accountId);
-      platformGroups.set(platform, group);
+      const policy = apiKeyTemplatePolicy(
+        this.config.operations.upstreamManagement.convertedApiKeyPolicy,
+        platform,
+        row.base_url,
+        rules,
+      );
+      const groupKey = `${platform}:${policy.converted ? "converted" : "platform"}`;
+      const group = templateGroups.get(groupKey) ?? { platform, policy, accountIds: [] };
+      group.accountIds.push(accountId);
+      templateGroups.set(groupKey, group);
     }
     const applied = ids;
-    for (const [platform, platformAccountIds] of platformGroups) {
+    for (const { platform, policy, accountIds: platformAccountIds } of templateGroups.values()) {
       try {
         await this.runtime.applyApiKeyFailoverTemplates(
           platformAccountIds,
           this.config.operations.upstreamManagement.mutationTimeoutMs,
           platform,
+          policy,
         );
       } catch (error) {
         failed.push(...platformAccountIds.map((accountId) => ({ accountId, error: safeMessage(error instanceof Error ? error.message : String(error)) })));
@@ -1330,6 +1343,7 @@ export class UpstreamManagementService {
     const misaligned: Array<{
       accountId: number;
       reason: string;
+      converted?: boolean;
       poolMode?: unknown;
       tempEnabled?: unknown;
       ruleCount?: number;
@@ -1340,14 +1354,23 @@ export class UpstreamManagementService {
       const rawRules = typeof row.temp_rules === "string" ? (() => {
         try { return JSON.parse(row.temp_rules) as unknown; } catch { return []; }
       })() : row.temp_rules;
-      const platform = String(query.rows.find((candidate) => Number(candidate.id) === accountId)?.platform ?? "").toLowerCase();
+      const target = query.rows.find((candidate) => Number(candidate.id) === accountId);
+      const platform = String(target?.platform ?? "").toLowerCase();
       const expectedRules = rulesForFailoverPlatform(expectedRulesByPlatform, platform);
-      const rulesAligned = canonicalJson(rawRules) === canonicalJson(expectedRules);
-      const poolAligned = platform === "grok" || platform === "opencode_go" || row.pool_mode === (platform === "anthropic");
-      if (poolAligned && row.temp_enabled === true && rulesAligned) verified.push(accountId);
+      const policy = apiKeyTemplatePolicy(
+        this.config.operations.upstreamManagement.convertedApiKeyPolicy,
+        platform,
+        target?.base_url,
+        expectedRules,
+      );
+      const rulesAligned = canonicalJson(rawRules) === canonicalJson(policy.rules);
+      const poolAligned = policy.poolMode === undefined || row.pool_mode === policy.poolMode;
+      const tempAligned = row.temp_enabled === policy.tempUnschedulableEnabled;
+      if (poolAligned && tempAligned && rulesAligned) verified.push(accountId);
       else misaligned.push({
         accountId,
         reason: "runtime-template-readback-mismatch",
+        converted: policy.converted,
         poolMode: row.pool_mode,
         tempEnabled: row.temp_enabled,
         ruleCount: Array.isArray(rawRules) ? rawRules.length : 0,
@@ -1534,11 +1557,21 @@ export class UpstreamManagementService {
           this.config.operations.upstreamManagement.failoverRulesByPlatform,
           input.platform,
         );
+        const templatePolicy = apiKeyTemplatePolicy(
+          this.config.operations.upstreamManagement.convertedApiKeyPolicy,
+          input.platform,
+          baseUrl,
+          templateRules,
+        );
         await this.runtime.configureApiKeyAccounts(
           [resolvedAccountId],
           {
             ...(needsRuntimeSettings ? { priority, concurrency: capacity, group_ids: effectiveGroupIds, proxy_id: settings.proxyId } : {}),
-            credentials: {
+            credentials: templatePolicy.converted ? {
+              ...(templatePolicy.poolMode === undefined ? {} : { pool_mode: templatePolicy.poolMode }),
+              temp_unschedulable_enabled: templatePolicy.tempUnschedulableEnabled,
+              temp_unschedulable_rules: templatePolicy.rules,
+            } : {
               pool_mode: input.poolMode,
               ...(templateRules.length > 0 ? {
                 temp_unschedulable_enabled: true,
@@ -1611,19 +1644,31 @@ export class UpstreamManagementService {
       this.config.operations.upstreamManagement.failoverRulesByPlatform,
       account.platform,
     );
+    const templatePolicy = apiKeyTemplatePolicy(
+      this.config.operations.upstreamManagement.convertedApiKeyPolicy,
+      account.platform,
+      baseUrl,
+      templateRules,
+    );
     const groupIds = input.groupIds === undefined ? undefined : validateGroupIds(input.groupIds);
     await this.runtime.configureApiKeyAccounts([id], {
       ...(name && name !== account.name ? { name } : {}),
       ...(groupIds ? { group_ids: groupIds } : {}),
       credentials: {
         ...(baseUrl !== account.baseUrl ? { base_url: baseUrl } : {}),
-        pool_mode: account.poolMode,
-        ...(templateRules.length > 0 ? {
-          temp_unschedulable_enabled: true,
-          temp_unschedulable_rules: templateRules,
+        ...(templatePolicy.converted ? {
+          ...(templatePolicy.poolMode === undefined ? {} : { pool_mode: templatePolicy.poolMode }),
+          temp_unschedulable_enabled: templatePolicy.tempUnschedulableEnabled,
+          temp_unschedulable_rules: templatePolicy.rules,
         } : {
-          temp_unschedulable_enabled: false,
-          temp_unschedulable_rules: [],
+          pool_mode: account.poolMode,
+          ...(templateRules.length > 0 ? {
+            temp_unschedulable_enabled: true,
+            temp_unschedulable_rules: templateRules,
+          } : {
+            temp_unschedulable_enabled: false,
+            temp_unschedulable_rules: [],
+          }),
         }),
       },
     }, this.config.operations.upstreamManagement.mutationTimeoutMs, account.platform);

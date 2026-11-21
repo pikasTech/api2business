@@ -682,6 +682,13 @@ operations:
     quotaMonitor:
       # 只隐藏额度监控展示与汇总，不停止采样、不改变调度。
       excludedWalletKeys: [ https://sub.api2business.com ]
+    convertedApiKeyPolicy:
+      # 平台与 base_url 同时匹配的转接 API-key 上游统一使用池模式，不套平台临时不可调度规则。
+      # 语义唯一权威：docs/specs/upstream-management.md#转接-api-key-上游策略。
+      platforms: [ deepseek ]
+      baseUrls: [ https://sub.api2business.com ]
+      poolMode: true
+      tempUnschedulableEnabled: false
     rechargeCandidates:
       lowBalanceCny: 10
       lookbackHours: 24

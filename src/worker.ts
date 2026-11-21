@@ -51,12 +51,14 @@ const runtime = new Sub2ApiRuntimeService(
   sub2apiClient,
   config.operations.upstreamManagement.failoverRules,
   config.operations.upstreamManagement.failoverRulesByPlatform,
+  config.operations.upstreamManagement.convertedApiKeyPolicy,
 );
 const stopConfigHotReload = startConfigHotReload(config, requiredOption("--config"), (next) => {
   runtime.updateApiKeyFailoverRules(
     next.operations.upstreamManagement.failoverRules,
     next.operations.upstreamManagement.failoverRulesByPlatform,
   );
+  runtime.updateConvertedApiKeyPolicy(next.operations.upstreamManagement.convertedApiKeyPolicy);
 });
 const probeIsolation = new ProbeIsolationService(config, sub2apiClient, runtime);
 const accountImports = new AccountImportService(config, remoteReads, null, {

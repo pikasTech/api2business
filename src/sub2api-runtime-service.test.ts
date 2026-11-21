@@ -523,7 +523,7 @@ test("API-key creation selects the failover template from the account platform",
   expect(JSON.stringify(credentials)).not.toContain("gpt upstream");
 });
 
-test("bulk API-key configuration combines runtime settings and failover template", async () => {
+test("bulk API-key configuration without credentials preserves existing template fields", async () => {
   const calls: Array<{ path: string; body: Record<string, unknown> }> = [];
   const client = { mutate: async (_method: string, path: string, body: Record<string, unknown>) => {
     calls.push({ path, body });
@@ -543,11 +543,11 @@ test("bulk API-key configuration combines runtime settings and failover template
     proxy_id: 3,
     group_ids: [2, 3],
     confirm_mixed_channel_risk: true,
-    credentials: expect.objectContaining({ temp_unschedulable_enabled: true }),
+    credentials: {},
   }) }]);
 });
 
-test("bulk API-key isolation patch preserves the existing pool mode", async () => {
+test("bulk API-key isolation patch preserves existing pool and template fields", async () => {
   const calls: Array<Record<string, unknown>> = [];
   const client = { mutate: async (_method: string, _path: string, body: Record<string, unknown>) => {
     calls.push(body);
@@ -560,11 +560,58 @@ test("bulk API-key isolation patch preserves the existing pool mode", async () =
   await runtime.configureApiKeyAccounts([488], { group_ids: [161] }, 120000, "anthropic");
 
   const credentials = calls[0]?.credentials as Record<string, unknown>;
-  expect(credentials.pool_mode).toBeUndefined();
-  expect(credentials.temp_unschedulable_enabled).toBe(true);
-  expect(credentials.temp_unschedulable_rules).toEqual([
-    { error_code: 503, keywords: ["local_capacity_exhausted"], duration_minutes: 3 },
-  ]);
+  expect(credentials).toEqual({});
+});
+
+test("converted DeepSeek accounts force pool mode and disable temporary scheduling", async () => {
+  const calls: Array<{ body: Record<string, unknown> }> = [];
+  const client = { mutate: async (_method: string, _path: string, body: Record<string, unknown>) => {
+    calls.push({ body });
+    return { success: 1, failed: 0, success_ids: [1554] };
+  } } as unknown as Sub2ApiClient;
+  const deepseekRules = [{ error_code: 429, keywords: ["rate limited"], duration_minutes: 3 }];
+  const runtime = new Sub2ApiRuntimeService(client, [], { deepseek: deepseekRules }, {
+    platforms: ["deepseek"],
+    baseUrls: ["https://sub.api2business.com"],
+    poolMode: true,
+    tempUnschedulableEnabled: false,
+  });
+
+  await runtime.configureApiKeyAccounts([1554], {
+    credentials: { base_url: "https://sub.api2business.com" },
+  }, 120000, "deepseek");
+
+  expect(calls[0]?.body.credentials).toEqual({
+    base_url: "https://sub.api2business.com",
+    pool_mode: true,
+    temp_unschedulable_enabled: false,
+    temp_unschedulable_rules: [],
+  });
+});
+
+test("ordinary DeepSeek accounts retain the platform non-pool template", async () => {
+  const calls: Array<{ body: Record<string, unknown> }> = [];
+  const client = { mutate: async (_method: string, _path: string, body: Record<string, unknown>) => {
+    calls.push({ body });
+    return { success: 1, failed: 0, success_ids: [480] };
+  } } as unknown as Sub2ApiClient;
+  const deepseekRules = [{ error_code: 429, keywords: ["rate limited"], duration_minutes: 3 }];
+  const runtime = new Sub2ApiRuntimeService(client, [], { deepseek: deepseekRules }, {
+    platforms: ["deepseek"],
+    baseUrls: ["https://sub.api2business.com"],
+    poolMode: true,
+    tempUnschedulableEnabled: false,
+  });
+
+  await runtime.configureApiKeyAccounts([480], {
+    credentials: { base_url: "https://api.deepseek.com" },
+  }, 120000, "deepseek");
+
+  expect(calls[0]?.body.credentials).toEqual({
+    base_url: "https://api.deepseek.com",
+    temp_unschedulable_enabled: true,
+    temp_unschedulable_rules: deepseekRules,
+  });
 });
 
 test("bulk API-key template uses the YAML-owned mutation timeout", async () => {
