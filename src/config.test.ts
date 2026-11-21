@@ -68,6 +68,16 @@ describe("upstream scheduling v2 platform validation", () => {
     });
   });
 
+  test("loads the converted API-key policy from owning YAML", () => {
+    const config = loadConfig(join(configDir, "api2business.example.yaml"));
+    expect(config.operations.upstreamManagement.convertedApiKeyPolicy).toEqual({
+      platforms: ["deepseek"],
+      baseUrls: ["https://sub.api2business.com"],
+      poolMode: true,
+      tempUnschedulableEnabled: false,
+    });
+  });
+
   test("loads cached idle-probe scopes for opencode and commandcode", () => {
     const config = loadConfig(join(configDir, "api2business.example.yaml"));
     expect(config.operations.upstreamSchedulingV2?.scopes.opencode).toMatchObject({

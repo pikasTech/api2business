@@ -322,6 +322,113 @@ test("template application writes Grok rules without touching another platform",
   ]);
 });
 
+test("template application separates converted DeepSeek from ordinary DeepSeek", async () => {
+  const config = loadConfig("config/api2business.example.yaml");
+  const rules = config.operations.upstreamManagement.failoverRulesByPlatform.deepseek;
+  const calls: Array<{ ids: number[]; platform?: string; policy?: { converted?: boolean; poolMode?: boolean; tempUnschedulableEnabled?: boolean; rules?: unknown[] } }> = [];
+  const readResult = {
+    queueDurationMs: 0,
+    queryDurationMs: 0,
+    totalDurationMs: 0,
+    queryStartedAt: "",
+    queryCompletedAt: "",
+    deduplicated: false,
+    cached: false,
+  };
+  const reads = {
+    query: async (input: { kind?: string }) => ({
+      ...readResult,
+      rows: String(input.kind).includes("verify")
+        ? [
+          { id: 480, pool_mode: false, temp_enabled: true, temp_rules: rules },
+          { id: 1554, pool_mode: true, temp_enabled: false, temp_rules: [] },
+        ]
+        : [
+          { id: 480, platform: "deepseek", base_url: "https://api.deepseek.com" },
+          { id: 1554, platform: "deepseek", base_url: "https://sub.api2business.com" },
+        ],
+    }),
+    status: () => ({
+      owner: "native-api", applicationName: "api2business-read-broker", connectionLimit: 1,
+      queueDepth: 0, manualQueueDepth: 0, automaticQueueDepth: 0, active: false,
+      activeKind: null, activeStartedAt: null, totalQueries: 0, deduplicatedQueries: 0,
+      cacheHits: 0, queueTimeouts: 0, queryTimeouts: 0, connectionRecycles: 0,
+      failedQueries: 0, maximumObservedDatabaseConcurrency: 0, lastCompletedAt: null, lastError: null,
+    }),
+  } as const;
+  const runtime = {
+    applyApiKeyFailoverTemplates: async (ids: number[], _timeoutMs?: number, platform?: string, policy?: typeof calls[number]["policy"]) => {
+      calls.push({ ids, platform, policy });
+      return { accountIds: ids };
+    },
+  };
+  const service = new UpstreamManagementService(
+    config,
+    reads as unknown as Sub2ApiReadClient,
+    null,
+    runtime as unknown as ConstructorParameters<typeof UpstreamManagementService>[3],
+  );
+
+  await expect(service.applyTemplate([480, 1554])).resolves.toMatchObject({
+    ok: true,
+    targetCount: 2,
+    appliedCount: 2,
+    verifiedCount: 2,
+    misalignedCount: 0,
+  });
+  expect(calls).toEqual(expect.arrayContaining([
+    expect.objectContaining({
+      ids: [480], platform: "deepseek",
+      policy: expect.objectContaining({ converted: false, poolMode: false, tempUnschedulableEnabled: true }),
+    }),
+    expect.objectContaining({
+      ids: [1554], platform: "deepseek",
+      policy: expect.objectContaining({ converted: true, poolMode: true, tempUnschedulableEnabled: false, rules: [] }),
+    }),
+  ]));
+});
+
+test("updating a converted DeepSeek account restores pool mode and disables temporary scheduling", async () => {
+  const config = loadConfig("config/api2business.example.yaml");
+  const calls: Array<{ ids: number[]; patch: Record<string, unknown>; platform?: string }> = [];
+  const row = {
+    id: "1554", name: "https://sub.api2business.com plus 1", platform: "deepseek", type: "apikey",
+    status: "active", schedulable: true, priority: 1, concurrency: 16, proxy_id: 0,
+    base_url: "https://sub.api2business.com", pool_mode: false, group_ids: ["131"], group_names: ["deepseek"],
+  };
+  const reads = {
+    query: async () => ({ rows: [row], queueDurationMs: 0, queryDurationMs: 0, totalDurationMs: 0,
+      queryStartedAt: "", queryCompletedAt: "", deduplicated: false, cached: false }),
+  } as unknown as Sub2ApiReadClient;
+  const runtime = {
+    configureApiKeyAccounts: async (ids: number[], patch: Record<string, unknown>, _timeoutMs?: number, platform?: string) => {
+      calls.push({ ids, patch, platform });
+      return { ok: true };
+    },
+  };
+  const service = new UpstreamManagementService(
+    config,
+    reads,
+    null,
+    runtime as unknown as ConstructorParameters<typeof UpstreamManagementService>[3],
+  );
+
+  await service.update(1554, { groupIds: [131, 192] });
+
+  expect(calls[0]).toMatchObject({
+    ids: [1554],
+    platform: "deepseek",
+    patch: {
+      group_ids: [131, 192],
+      credentials: {
+        pool_mode: true,
+        temp_unschedulable_enabled: false,
+        temp_unschedulable_rules: [],
+      },
+    },
+  });
+});
+
 test("upstream creation preserves stable identity and exposes initialization to the worker", async () => {
   const source = await Bun.file(new URL("./upstream-management.ts", import.meta.url)).text();
   const createBody = source.slice(source.indexOf("  async create(input:"), source.indexOf("  async update(id:"));

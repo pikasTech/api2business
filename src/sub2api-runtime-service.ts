@@ -12,6 +12,12 @@ import type { AppConfig } from "./config";
 import type { Sub2ApiReadClient } from "./sub2api-read-executor";
 import { collectSchedulingRuntime } from "./scheduling-runtime-evidence";
 import { normalizeModelMapping, type ModelSyncPolicy } from "./model-sync-policy";
+import {
+  apiKeyTemplatePolicy,
+  EMPTY_CONVERTED_API_KEY_POLICY,
+  type ApiKeyTemplatePolicy,
+  type ConvertedApiKeyPolicyConfig,
+} from "./converted-api-key-policy";
 
 type Row = Record<string, unknown>;
 
@@ -84,14 +90,17 @@ export function runtimeImportIdempotencyKey(operationKey: string, value: unknown
 export class Sub2ApiRuntimeService {
   private apiKeyFailoverRules: Array<{ error_code: number; keywords: string[]; duration_minutes: number }>;
   private apiKeyFailoverRulesByPlatform: Record<string, Array<{ error_code: number; keywords: string[]; duration_minutes: number }>>;
+  private convertedApiKeyPolicy: ConvertedApiKeyPolicyConfig;
 
   constructor(
     private readonly client: Sub2ApiClient,
     apiKeyFailoverRules: Array<{ error_code: number; keywords: string[]; duration_minutes: number }> = [],
     apiKeyFailoverRulesByPlatform: Record<string, Array<{ error_code: number; keywords: string[]; duration_minutes: number }>> = {},
+    convertedApiKeyPolicy: ConvertedApiKeyPolicyConfig = EMPTY_CONVERTED_API_KEY_POLICY,
   ) {
     this.apiKeyFailoverRules = apiKeyFailoverRules;
     this.apiKeyFailoverRulesByPlatform = { openai: apiKeyFailoverRules, ...apiKeyFailoverRulesByPlatform };
+    this.convertedApiKeyPolicy = convertedApiKeyPolicy;
   }
 
   async reconcileServicePolicy(reads: Sub2ApiReadClient, config: AppConfig, confirm: boolean) {
@@ -110,6 +119,10 @@ export class Sub2ApiRuntimeService {
     this.apiKeyFailoverRulesByPlatform = { openai: rules, ...rulesByPlatform };
   }
 
+  updateConvertedApiKeyPolicy(policy: ConvertedApiKeyPolicyConfig): void {
+    this.convertedApiKeyPolicy = policy;
+  }
+
   private failoverRulesForPlatform(platform?: string): Array<{ error_code: number; keywords: string[]; duration_minutes: number }> {
     const normalized = String(platform ?? "openai").trim().toLowerCase();
     return this.apiKeyFailoverRulesByPlatform[normalized] ?? [];
@@ -117,7 +130,22 @@ export class Sub2ApiRuntimeService {
 
   private apiKeyCredentials(value: unknown, platform?: string): Row {
     const input = record(value) ?? {};
+    if (Object.keys(input).length === 0) return input;
     const rules = this.failoverRulesForPlatform(platform);
+    const templatePolicy = apiKeyTemplatePolicy(
+      this.convertedApiKeyPolicy,
+      platform,
+      input.base_url,
+      rules,
+    );
+    if (templatePolicy.converted) {
+      return {
+        ...input,
+        ...(templatePolicy.poolMode === undefined ? {} : { pool_mode: templatePolicy.poolMode }),
+        temp_unschedulable_enabled: templatePolicy.tempUnschedulableEnabled,
+        temp_unschedulable_rules: templatePolicy.rules,
+      };
+    }
     const defaultTemplate = platform === undefined || rules.length > 0;
     return {
       ...input,
@@ -657,17 +685,27 @@ export class Sub2ApiRuntimeService {
     }, timeoutMs);
   }
 
-  async applyApiKeyFailoverTemplates(accountIds: number[], timeoutMs?: number, platform = "openai"): Promise<Record<string, unknown>> {
+  async applyApiKeyFailoverTemplates(
+    accountIds: number[],
+    timeoutMs?: number,
+    platform = "openai",
+    templatePolicy?: ApiKeyTemplatePolicy,
+  ): Promise<Record<string, unknown>> {
     const ids = [...new Set(accountIds)].sort((left, right) => left - right);
     if (ids.length === 0 || ids.some((id) => !Number.isSafeInteger(id) || id < 1)) {
       throw new Error("bulk API-key template requires stable positive account IDs");
     }
-    const normalized = platform.toLowerCase();
+    const resolvedPolicy = templatePolicy ?? apiKeyTemplatePolicy(
+      this.convertedApiKeyPolicy,
+      platform,
+      "",
+      this.failoverRulesForPlatform(platform),
+    );
     const credentials: Record<string, unknown> = {
-      temp_unschedulable_enabled: true,
-      temp_unschedulable_rules: this.failoverRulesForPlatform(platform),
+      ...(resolvedPolicy.poolMode === undefined ? {} : { pool_mode: resolvedPolicy.poolMode }),
+      temp_unschedulable_enabled: resolvedPolicy.tempUnschedulableEnabled,
+      temp_unschedulable_rules: resolvedPolicy.rules,
     };
-    if (normalized !== "grok" && normalized !== "opencode_go") credentials.pool_mode = normalized === "anthropic";
     const result = await this.client.mutate<Record<string, unknown>>("POST", "/admin/accounts/bulk-update", {
       account_ids: ids,
       credentials,

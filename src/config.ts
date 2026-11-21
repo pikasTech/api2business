@@ -10,6 +10,7 @@ import {
   automaticModelSyncDisabledByPolicy,
   type ModelSyncPolicy,
 } from "./model-sync-policy";
+import type { ConvertedApiKeyPolicyConfig } from "./converted-api-key-policy";
 
 export type IdentityField = "username" | "email" | "emailLocalPart";
 export type OAuthPlanType = "k12" | "plus" | "free" | "team";
@@ -42,6 +43,7 @@ export interface UpstreamManagementConfig {
     opencode_go: FailoverRule[];
     gemini: FailoverRule[];
   };
+  convertedApiKeyPolicy: ConvertedApiKeyPolicyConfig;
   primaryGroupId: number;
   groupIds: number[];
   priority: number;
@@ -865,6 +867,33 @@ export function loadConfig(path: string): AppConfig {
   };
   const upstreamFailoverRules = failoverTemplates.codex.rules;
   const externalCutoff = object(upstreamManagement.externalCutoff, "operations.upstreamManagement.externalCutoff");
+  const convertedApiKeyPolicy = object(
+    upstreamManagement.convertedApiKeyPolicy,
+    "operations.upstreamManagement.convertedApiKeyPolicy",
+  );
+  const convertedPlatforms = strings(
+    convertedApiKeyPolicy,
+    "platforms",
+    "operations.upstreamManagement.convertedApiKeyPolicy",
+  ).map((platform) => platform.toLowerCase());
+  if (convertedPlatforms.length === 0) {
+    throw new Error("operations.upstreamManagement.convertedApiKeyPolicy.platforms must not be empty");
+  }
+  const convertedBaseUrls = strings(
+    convertedApiKeyPolicy,
+    "baseUrls",
+    "operations.upstreamManagement.convertedApiKeyPolicy",
+  ).map((value) => {
+    const normalized = normalizeUpstreamWallet(value);
+    const parsed = new URL(normalized);
+    if (parsed.protocol !== "https:" || parsed.username || parsed.password || parsed.search || parsed.hash) {
+      throw new Error("operations.upstreamManagement.convertedApiKeyPolicy.baseUrls must contain HTTPS URLs without credentials, query, or fragment");
+    }
+    return normalized;
+  });
+  if (convertedBaseUrls.length === 0) {
+    throw new Error("operations.upstreamManagement.convertedApiKeyPolicy.baseUrls must not be empty");
+  }
   const externalCutoffRulesValue = externalCutoff.rules;
   if (!Array.isArray(externalCutoffRulesValue) || externalCutoffRulesValue.length === 0) {
     throw new Error("operations.upstreamManagement.externalCutoff.rules must be a non-empty array");
@@ -1262,6 +1291,20 @@ export function loadConfig(path: string): AppConfig {
           deepseek: failoverTemplates.deepseek.rules,
           opencode_go: failoverTemplates.opencode.rules,
           gemini: failoverTemplates.gemini.rules,
+        },
+        convertedApiKeyPolicy: {
+          platforms: [...new Set(convertedPlatforms)],
+          baseUrls: [...new Set(convertedBaseUrls)],
+          poolMode: booleanValue(
+            convertedApiKeyPolicy,
+            "poolMode",
+            "operations.upstreamManagement.convertedApiKeyPolicy",
+          ),
+          tempUnschedulableEnabled: booleanValue(
+            convertedApiKeyPolicy,
+            "tempUnschedulableEnabled",
+            "operations.upstreamManagement.convertedApiKeyPolicy",
+          ),
         },
         primaryGroupId: upstreamPrimaryGroupId,
         groupIds: upstreamGroupIds,

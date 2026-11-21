@@ -85,6 +85,7 @@ const stopConfigHotReload = startConfigHotReload(config, requiredOption("--confi
     next.operations.upstreamManagement.failoverRules,
     next.operations.upstreamManagement.failoverRulesByPlatform,
   );
+  context.runtime.updateConvertedApiKeyPolicy(next.operations.upstreamManagement.convertedApiKeyPolicy);
 });
 
 console.log(JSON.stringify({
