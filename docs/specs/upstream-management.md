@@ -12,6 +12,9 @@
   - Sub2API 原生接口负责账号和上游的实际写入。
 - Codex、Claude、Grok、DeepSeek 和 Gemini 是平等作用域；作用域之间不得通过历史标签、URL 或混池结果
   互相推断账号归属。
+
+## 转接 API-key 上游策略
+
 - 转接 API-key 上游的池模式与临时调度策略唯一由
   `operations.upstreamManagement.convertedApiKeyPolicy` 声明，语义和配置合同只在本节定义。
   - 匹配条件是账号 `platform` 属于 `platforms` 且规范化后的 `base_url` 属于 `baseUrls`；
