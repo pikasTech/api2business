@@ -419,6 +419,7 @@ export class AdminHttpClient {
     top: number,
     account: string | null,
     group: string | null,
+    model: string | null,
     start: string | null = null,
     end: string | null = null,
   ): Promise<Record<string, unknown>> {
@@ -428,6 +429,7 @@ export class AdminHttpClient {
     });
     if (account) query.set("account", account);
     if (group) query.set("group", group);
+    if (model) query.set("model", model);
     if (start) query.set("start", start);
     if (end) query.set("end", end);
     return this.request(`/api/admin/errors/aggregate?${query}`, {}, 60000);

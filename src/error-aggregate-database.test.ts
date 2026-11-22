@@ -30,6 +30,7 @@ test("error aggregate is one bounded database query with recovered request detec
   expect(errorAggregateQuery).toContain("OR (o.error_phase='request' AND o.error_type='cyber_policy')");
   expect(errorAggregateQuery).toContain("o.created_at >= $5::timestamptz");
   expect(errorAggregateQuery).toContain("o.created_at < $6::timestamptz");
+  expect(errorAggregateQuery).toContain("AND ($7::text IS NULL OR LOWER(COALESCE(o.requested_model, o.model, 'unknown')) = LOWER($7::text))");
   expect(errorAggregateQuery).toContain('terminal.request_id = e.request_id');
   expect(errorAggregateQuery).not.toContain("OR u.request_id IN");
   expect(errorAggregateQuery).not.toContain("error_body");

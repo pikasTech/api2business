@@ -55,6 +55,7 @@ selected_errors AS MATERIALIZED (
       OR (o.error_phase='request' AND o.error_type='cyber_policy'))
     AND ($5::timestamptz IS NULL OR o.created_at >= $5::timestamptz)
     AND ($6::timestamptz IS NULL OR o.created_at < $6::timestamptz)
+    AND ($7::text IS NULL OR LOWER(COALESCE(o.requested_model, o.model, 'unknown')) = LOWER($7::text))
   ORDER BY o.created_at DESC, o.id DESC
   LIMIT $1
 ),
@@ -243,6 +244,7 @@ export async function collectErrorAggregateFromDatabase(
   top: number,
   accountSelector: string | null = null,
   groupSelector: string | null = null,
+  modelSelector: string | null = null,
   start: string | null = null,
   end: string | null = null,
   priority: Sub2ApiReadPriority = "manual",
@@ -261,12 +263,13 @@ export async function collectErrorAggregateFromDatabase(
       top,
       accountSelector,
       groupSelector,
+      modelSelector,
       start,
       end,
     ]),
     kind: "errors.aggregate",
     sql: errorAggregateSql,
-    parameters: [limit, accountSelector, groupSelector, top, start, end],
+    parameters: [limit, accountSelector, groupSelector, top, start, end, modelSelector],
     priority,
     cacheMode: "prefer-cache",
   });
@@ -277,6 +280,9 @@ export async function collectErrorAggregateFromDatabase(
     if (groupSelector !== null && integer(rows[0]?.sampled_error_rows) === 0) {
       throw new Error(`group selector resolved no recent errors: ${groupSelector}`);
     }
+    if (modelSelector !== null && integer(rows[0]?.sampled_error_rows) === 0) {
+      throw new Error(`model selector resolved no recent errors: ${modelSelector}`);
+    }
   return {
       ok: true,
       mode: "error-aggregate-postgresql",
@@ -284,6 +290,7 @@ export async function collectErrorAggregateFromDatabase(
       top,
       accountSelector,
       groupSelector,
+      modelSelector,
       start,
       end,
       groupFilterBasis: "request-group",

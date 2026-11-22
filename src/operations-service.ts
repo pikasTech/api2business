@@ -2104,6 +2104,7 @@ export class OperationsService {
     top: number,
     accountSelector: string | null,
     groupSelector: string | null,
+    modelSelector: string | null,
     start: string | null = null,
     end: string | null = null,
   ) {
@@ -2114,6 +2115,7 @@ export class OperationsService {
       top,
       accountSelector,
       groupSelector,
+      modelSelector,
       start,
       end,
       "manual",
