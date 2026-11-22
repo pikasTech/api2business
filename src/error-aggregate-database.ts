@@ -103,7 +103,9 @@ classified_errors AS (
       WHEN COALESCE(e.is_business_limited, false)
         OR LOWER(COALESCE(e.error_phase, '')) = 'business' THEN 'business_limit'
       WHEN LOWER(COALESCE(e.error_phase, '')) = 'client'
-        OR (e.status_code = 400 AND LOWER(COALESCE(e.error_type, '')) LIKE '%invalid_request%')
+        OR (e.status_code = 400
+          AND LOWER(COALESCE(e.error_phase, '')) <> 'upstream'
+          AND LOWER(COALESCE(e.error_type, '')) LIKE '%invalid_request%')
         THEN 'client_input'
       WHEN e.status_code = 429 OR e.upstream_status_code = 429 THEN 'rate_limit'
       WHEN e.status_code IN (502, 503, 504, 524)

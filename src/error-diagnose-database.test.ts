@@ -31,6 +31,7 @@ test("error diagnosis uses one bounded query for signatures and failover chains"
   expect(errorDiagnoseQuery).toContain("probe.id = o.api_key_id");
   expect(errorDiagnoseQuery).not.toContain("account_groups");
   expect(errorDiagnoseQuery).not.toContain("api_key_prefix");
+  expect(errorDiagnoseQuery).toContain("message_text LIKE '%insufficient credits%'");
 });
 
 test("error diagnosis projection exposes bounded facts without raw payloads", () => {
