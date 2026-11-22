@@ -464,9 +464,10 @@ test("pause sets schedulable=false and verifies the native readback", async () =
   const source = await Bun.file(new URL("./upstream-management.ts", import.meta.url)).text();
   const pauseBody = source.slice(source.indexOf("  async pause(accountIds:"), source.indexOf("  async submitTemplate("));
   expect(pauseBody).toContain("await this.runtime.setSchedulableAccounts(ids, false");
-  expect(pauseBody).toContain("account.schedulable === false");
+  expect(pauseBody).toContain("readback.filter((account) => account && account.schedulable === false)");
   expect(pauseBody).toContain("上游暂停回读不一致");
-  expect(pauseBody).not.toContain("delete");
+  expect(pauseBody).not.toContain("DELETE FROM");
+  expect(pauseBody).not.toContain("deleted_at = NOW");
 });
 
 test("new upstream runtime settings and failover template use one bulk update", async () => {
@@ -576,4 +577,15 @@ test("keeps Codex and Claude templates as separate platform files", () => {
     opencode: "config/failover-templates/opencode.yaml",
     gemini: "config/failover-templates/gemini.yaml",
   });
+});
+
+test("pause reports uncovered models without blocking the pause", async () => {
+  const source = await Bun.file(new URL("./upstream-management.ts", import.meta.url)).text();
+  const pauseBody = source.slice(source.indexOf("  async pause(accountIds:"), source.indexOf("  async submitTemplate("));
+  expect(pauseBody).toContain("const coverageWarnings = await this.pauseCoverageWarnings(ids)");
+  expect(pauseBody).toContain("coverageWarnings,");
+  const coverageBody = source.slice(source.indexOf("  private async pauseCoverageWarnings("), source.indexOf("  async submitTemplate("));
+  expect(coverageBody).toContain("jsonb_object_keys");
+  expect(coverageBody).toContain("COALESCE(a.schedulable, false) = true");
+  expect(coverageBody).toContain("uncoveredModels");
 });

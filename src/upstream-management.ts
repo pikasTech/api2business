@@ -654,11 +654,70 @@ export class UpstreamManagementService {
     const ids = [...new Set(accountIds)].sort((left, right) => left - right);
     if (ids.length === 0 || ids.some((id) => !positiveInteger(id))) throw new Error("上游暂停需要至少一个有效账号 ID");
     if (!this.runtime) throw new UpstreamManagementError("Api2Business Sub2API runtime mutation service 不可用", 503, { operation: "pause" });
-    await this.runtime.setSchedulableAccounts(ids, false, this.config.operations.upstreamManagement.mutationTimeoutMs);
     const accounts = await Promise.all(ids.map((id) => this.accountQuery(id)));
-    const verified = accounts.filter((account) => account && account.schedulable === false).length;
+    const coverageWarnings = await this.pauseCoverageWarnings(ids);
+    await this.runtime.setSchedulableAccounts(ids, false, this.config.operations.upstreamManagement.mutationTimeoutMs);
+    const readback = await Promise.all(ids.map((id) => this.accountQuery(id)));
+    const verified = readback.filter((account) => account && account.schedulable === false).length;
     if (verified !== ids.length) throw new Error(`上游暂停回读不一致：${verified}/${ids.length}`);
-    return { ok: true, operation: "pause", pausedAccountIds: ids, accounts: accounts.filter(Boolean), paused: ids.length, verifiedCount: verified };
+    return {
+      ok: true, operation: "pause", pausedAccountIds: ids, accounts: readback.filter(Boolean),
+      paused: ids.length, verifiedCount: verified, coverageWarnings,
+    };
+  }
+
+  // 暂停前只读核对组内模型覆盖，避免把唯一供给账号停掉后产生 model_not_found。
+  // 结果只作警告，不阻断操作；调用方仍需按真实用户错误和候选证据决定是否暂停。
+  private async pauseCoverageWarnings(accountIds: number[]): Promise<Row[]> {
+    const ids = accountIds.join(",");
+    const query = await this.reads.query<Row>({
+      key: `upstream-pause-coverage:${ids}`,
+      kind: "upstream-pause-coverage",
+      priority: "manual",
+      cacheMode: "bypass-cache",
+      sql: `WITH target AS (
+        SELECT a.id, LOWER(a.platform) AS platform, a.credentials
+        FROM accounts a
+        WHERE a.deleted_at IS NULL AND a.id = ANY(string_to_array($1::text, ',')::bigint[])
+      ), target_models AS (
+        SELECT t.id AS account_id, ag.group_id, g.name AS group_name, t.platform, m.key AS model_key
+        FROM target t
+        JOIN account_groups ag ON ag.account_id = t.id
+        LEFT JOIN groups g ON g.id = ag.group_id AND g.deleted_at IS NULL
+        CROSS JOIN LATERAL jsonb_object_keys(
+          CASE WHEN jsonb_typeof(t.credentials->'model_mapping') = 'object'
+            THEN t.credentials->'model_mapping' ELSE '{}'::jsonb END) AS m(key)
+      ), remaining AS (
+        SELECT LOWER(a.platform) AS platform, ag.group_id, m.key AS model_key
+        FROM accounts a
+        JOIN account_groups ag ON ag.account_id = a.id
+        CROSS JOIN LATERAL jsonb_object_keys(
+          CASE WHEN jsonb_typeof(a.credentials->'model_mapping') = 'object'
+            THEN a.credentials->'model_mapping' ELSE '{}'::jsonb END) AS m(key)
+        WHERE a.deleted_at IS NULL
+          AND a.status = 'active'
+          AND COALESCE(a.schedulable, false) = true
+          AND a.id <> ALL(string_to_array($1::text, ',')::bigint[])
+      )
+      SELECT tm.group_id, tm.group_name, tm.platform,
+        ARRAY_AGG(DISTINCT tm.model_key ORDER BY tm.model_key) AS uncovered_models
+      FROM target_models tm
+      WHERE NOT EXISTS (
+        SELECT 1 FROM remaining r
+        WHERE r.group_id = tm.group_id
+          AND r.platform = tm.platform
+          AND (r.model_key = tm.model_key OR r.model_key = '*')
+      )
+      GROUP BY tm.group_id, tm.group_name, tm.platform
+      ORDER BY tm.group_id`,
+      parameters: [ids],
+    });
+    return query.rows.map((row) => ({
+      groupId: positiveInteger(row.group_id),
+      groupName: typeof row.group_name === "string" ? row.group_name : null,
+      platform: typeof row.platform === "string" ? row.platform : null,
+      uncoveredModels: arrayStrings(row.uncovered_models),
+    }));
   }
 
   async submitTemplate(accountIds: number[], operationIdValue?: string | null): Promise<Record<string, unknown>> {
