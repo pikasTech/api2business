@@ -342,7 +342,7 @@ function help(): Record<string, unknown> {
       "reads status --over-api <absolute-http(s)-URL>",
       "reads runtime --group <positive-id> --platform openai|anthropic|grok|deepseek|gemini --over-api <absolute-http(s)-URL> (read-only live availability/concurrency/native version)",
       "observability report|costs|probe-costs|get|check|configure --help",
-      "errors aggregate [--start ISO --end ISO] [--limit N] [--top N] [--account <id-or-name>] [--group <id-or-exact-name>]",
+      "errors aggregate [--start ISO --end ISO] [--limit N] [--top N] [--account <id-or-name>] [--group <id-or-exact-name>] [--model <exact-id>]",
       "errors diagnose [--start ISO --end ISO] [--request-id <request-id>] [--model <exact-id>] [--limit N] [--top N] [--account <id-or-name>] [--group <id-or-exact-name>]",
       "errors cooldowns [--since <ISO>] [--until <ISO>] [--limit N] [--account <id-or-name>] [--model <exact-id>]",
       "errors inspect --request-id <request-id>",
@@ -1444,6 +1444,7 @@ async function remote(parsed: Parsed, config: ReturnType<typeof loadConfig>, tar
       parsed.top ?? config.monitor.errorAggregateTop,
       parsed.account,
       parsed.group,
+      parsed.model,
       parsed.start,
       parsed.end,
     );

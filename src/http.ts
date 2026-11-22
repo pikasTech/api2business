@@ -1105,6 +1105,7 @@ export function createHandler(
           top,
           url.searchParams.get("account"),
           url.searchParams.get("group"),
+          url.searchParams.get("model"),
           window?.start ?? null,
           window?.end ?? null,
         ));
