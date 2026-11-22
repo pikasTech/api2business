@@ -40,7 +40,9 @@ export function projectResponseEvidence(row: Row): Row {
 const stablePhraseSql = `
 JSONB_BUILD_OBJECT(
   'selectedModelAtCapacity', LOWER(message_text) LIKE '%selected model is at capacity%',
-  'insufficientBalance', LOWER(message_text) LIKE '%insufficient account balance%',
+  'insufficientBalance', LOWER(message_text) LIKE '%insufficient account balance%'
+    OR LOWER(message_text) LIKE '%insufficient credits%',
+  'insufficientCredits', LOWER(message_text) LIKE '%insufficient credits%',
   'modelNotFound', LOWER(message_text) LIKE '%model_not_found%',
   'noAvailableChannel', LOWER(message_text) LIKE '%no available channel for model%',
   'upstreamRequestFailed', LOWER(message_text) LIKE '%upstream request failed%',

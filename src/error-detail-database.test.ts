@@ -18,6 +18,7 @@ test("error detail queries are bounded and request scoped", () => {
   expect(errorGetQuery).toContain("'badGateway'");
   expect(errorGetQuery).toContain("'gatewayTimeout'");
   expect(errorGetQuery).toContain("'streamInterrupted'");
+  expect(errorGetQuery).toContain("'insufficientCredits'");
   expect(errorListQuery).not.toContain("SET TRANSACTION READ ONLY");
 });
 
