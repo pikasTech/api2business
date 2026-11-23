@@ -241,9 +241,15 @@ test("template application verifies persisted runtime fields through the queued 
   expect(source).toContain("verifiedCount");
 });
 
+test("template application covers CommandCode accounts with its own rules", async () => {
+  const source = await Bun.file(new URL("./upstream-management.ts", import.meta.url)).text();
+  expect(source).toContain('normalized === "command_code"');
+  expect(source).toContain("rulesByPlatform[normalized]");
+});
+
 test("template application skips a platform only when that platform has no rules", async () => {
   const source = await Bun.file(new URL("./upstream-management.ts", import.meta.url)).text();
-  expect(source).toContain("LOWER(a.platform) IN ('openai', 'anthropic', 'grok', 'deepseek', 'opencode_go', 'gemini')");
+  expect(source).toContain("LOWER(a.platform) IN ('openai', 'anthropic', 'grok', 'deepseek', 'opencode_go', 'command_code', 'gemini')");
   expect(source).toContain('reason: "platform-has-no-failover-template"');
   expect(source).toContain("skippedCount: skipped.length");
 });
@@ -576,7 +582,27 @@ test("keeps Codex and Claude templates as separate platform files", () => {
     deepseek: "config/failover-templates/deepseek.yaml",
     opencode: "config/failover-templates/opencode.yaml",
     gemini: "config/failover-templates/gemini.yaml",
+    commandcode: "config/failover-templates/commandcode.yaml",
   });
+});
+
+test("CommandCode scope has its own failover template", () => {
+  const parsed = loadConfig("config/api2business.example.yaml");
+  const commandcode = parsed.operations.upstreamManagement.failoverTemplates.commandcode;
+  expect(commandcode.platform).toBe("command_code");
+  const rules = parsed.operations.upstreamManagement.failoverRulesByPlatform.command_code;
+  expect(rules).toBe(commandcode.rules);
+  const matchCommandCode = (status: number, body: unknown) => rules.find((rule) =>
+    rule.error_code === status && rule.keywords.some((keyword) =>
+      JSON.stringify(body).toLowerCase().includes(keyword.toLowerCase())));
+  expect(matchCommandCode(400, {
+    error: {
+      code: "BAD_REQUEST",
+      message: "You have insufficient credits to make this request. Please purchase more credits to continue using the service.",
+      type: "invalid_request_error",
+    },
+  })?.duration_minutes).toBe(10);
+  expect(matchCommandCode(503, { error: { message: "Service temporarily unavailable", type: "api_error" } })?.duration_minutes).toBe(3);
 });
 
 test("pause reports uncovered models without blocking the pause", async () => {

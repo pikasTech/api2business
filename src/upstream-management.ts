@@ -35,7 +35,7 @@ function rulesForFailoverPlatform(
   platform: string,
 ): FailoverRule[] {
   const normalized = platform.toLowerCase();
-  if (normalized === "openai" || normalized === "anthropic" || normalized === "grok" || normalized === "deepseek" || normalized === "opencode_go" || normalized === "gemini") return rulesByPlatform[normalized];
+  if (normalized === "openai" || normalized === "anthropic" || normalized === "grok" || normalized === "deepseek" || normalized === "opencode_go" || normalized === "command_code" || normalized === "gemini") return rulesByPlatform[normalized];
   return [];
 }
 
@@ -1334,7 +1334,7 @@ export class UpstreamManagementService {
         FROM accounts a
         WHERE a.deleted_at IS NULL
           AND LOWER(a.type) = 'apikey'
-          AND LOWER(a.platform) IN ('openai', 'anthropic', 'grok', 'deepseek', 'opencode_go', 'gemini')
+          AND LOWER(a.platform) IN ('openai', 'anthropic', 'grok', 'deepseek', 'opencode_go', 'command_code', 'gemini')
           AND NULLIF(a.credentials->>'base_url', '') IS NOT NULL
           AND ($1::text = '' OR a.id = ANY(string_to_array($1::text, $2::text)::bigint[]))
         ORDER BY a.id`,

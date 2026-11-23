@@ -970,7 +970,7 @@
   - 最终费率以排队回读为准，不以创建初始快照或 `detectionOk` 判定。
 - 每个新上游都要配置并核验同平台切号模板及私有探活绑定。
   - 模板仅由 `operations.upstreamManagement.templateFiles` 声明。
-  - OpenAI、Anthropic、Grok、DeepSeek、OpenCode 和 Gemini 各自使用同平台模板。
+  - OpenAI、Anthropic、Grok、DeepSeek、OpenCode、CommandCode 和 Gemini 各自使用同平台模板。
   - 转接 API-key 上游的 pool mode 与临时调度例外只见
     [转接 API-key 上游策略](../../../docs/specs/upstream-management.md#转接-api-key-上游策略)。
   - Codex API-key 额外写入 `extra.openai_responses_mode=force_responses`。
