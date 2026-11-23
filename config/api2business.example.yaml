@@ -701,6 +701,7 @@ operations:
       deepseek: config/failover-templates/deepseek.yaml
       opencode: config/failover-templates/opencode.yaml
       gemini: config/failover-templates/gemini.yaml
+      commandcode: config/failover-templates/commandcode.yaml
     externalCutoff:
       enabled: true
       dryRun: true

@@ -26,6 +26,7 @@ export interface UpstreamManagementConfig {
     deepseek: string;
     opencode: string;
     gemini: string;
+    commandcode: string;
   };
   failoverTemplates: {
     codex: FailoverTemplate;
@@ -34,6 +35,7 @@ export interface UpstreamManagementConfig {
     deepseek: FailoverTemplate;
     opencode: FailoverTemplate;
     gemini: FailoverTemplate;
+    commandcode: FailoverTemplate;
   };
   failoverRulesByPlatform: {
     openai: FailoverRule[];
@@ -41,6 +43,7 @@ export interface UpstreamManagementConfig {
     grok: FailoverRule[];
     deepseek: FailoverRule[];
     opencode_go: FailoverRule[];
+    command_code: FailoverRule[];
     gemini: FailoverRule[];
   };
   convertedApiKeyPolicy: ConvertedApiKeyPolicyConfig;
@@ -81,7 +84,7 @@ export interface UpstreamManagementConfig {
 
 export interface FailoverTemplate {
   name: string;
-  platform: "openai" | "anthropic" | "grok" | "deepseek" | "opencode_go" | "gemini";
+  platform: "openai" | "anthropic" | "grok" | "deepseek" | "opencode_go" | "command_code" | "gemini";
   rules: FailoverRule[];
 }
 
@@ -500,13 +503,13 @@ function strings(parent: ObjectValue, key: string, path: string): string[] {
   return value as string[];
 }
 
-function loadFailoverTemplate(rootDirectory: string, fileValue: string, templateKey: "codex" | "claude" | "grok" | "deepseek" | "opencode" | "gemini"): FailoverTemplate {
+function loadFailoverTemplate(rootDirectory: string, fileValue: string, templateKey: "codex" | "claude" | "grok" | "deepseek" | "opencode" | "gemini" | "commandcode"): FailoverTemplate {
   const filePath = resolve(rootDirectory, fileValue);
   const path = `operations.upstreamManagement.templateFiles.${templateKey}`;
   const raw = object(parse(readFileSync(filePath, "utf8")), path);
   const name = stringValue(raw, "name", path);
   const platform = stringValue(raw, "platform", path);
-  const expectedPlatform = templateKey === "codex" ? "openai" : templateKey === "claude" ? "anthropic" : templateKey === "grok" ? "grok" : templateKey === "opencode" ? "opencode_go" : templateKey === "gemini" ? "gemini" : "deepseek";
+  const expectedPlatform = templateKey === "codex" ? "openai" : templateKey === "claude" ? "anthropic" : templateKey === "grok" ? "grok" : templateKey === "opencode" ? "opencode_go" : templateKey === "commandcode" ? "command_code" : templateKey === "gemini" ? "gemini" : "deepseek";
   if (platform !== expectedPlatform) throw new Error(`${path}.platform must be ${expectedPlatform}`);
   const rulesValue = raw.rules;
   if (!Array.isArray(rulesValue) || rulesValue.length === 0) throw new Error(`${path}.rules must be a non-empty array`);
@@ -857,6 +860,7 @@ export function loadConfig(path: string): AppConfig {
   const deepseekTemplatePath = stringValue(templateFiles, "deepseek", "operations.upstreamManagement.templateFiles");
   const opencodeTemplatePath = stringValue(templateFiles, "opencode", "operations.upstreamManagement.templateFiles");
   const geminiTemplatePath = stringValue(templateFiles, "gemini", "operations.upstreamManagement.templateFiles");
+  const commandcodeTemplatePath = stringValue(templateFiles, "commandcode", "operations.upstreamManagement.templateFiles");
   const failoverTemplates = {
     codex: loadFailoverTemplate(rootDirectory, codexTemplatePath, "codex"),
     claude: loadFailoverTemplate(rootDirectory, claudeTemplatePath, "claude"),
@@ -864,6 +868,7 @@ export function loadConfig(path: string): AppConfig {
     deepseek: loadFailoverTemplate(rootDirectory, deepseekTemplatePath, "deepseek"),
     opencode: loadFailoverTemplate(rootDirectory, opencodeTemplatePath, "opencode"),
     gemini: loadFailoverTemplate(rootDirectory, geminiTemplatePath, "gemini"),
+    commandcode: loadFailoverTemplate(rootDirectory, commandcodeTemplatePath, "commandcode"),
   };
   const upstreamFailoverRules = failoverTemplates.codex.rules;
   const externalCutoff = object(upstreamManagement.externalCutoff, "operations.upstreamManagement.externalCutoff");
@@ -1282,6 +1287,7 @@ export function loadConfig(path: string): AppConfig {
           deepseek: deepseekTemplatePath,
           opencode: opencodeTemplatePath,
           gemini: geminiTemplatePath,
+          commandcode: commandcodeTemplatePath,
         },
         failoverTemplates,
         failoverRulesByPlatform: {
@@ -1290,6 +1296,7 @@ export function loadConfig(path: string): AppConfig {
           grok: failoverTemplates.grok.rules,
           deepseek: failoverTemplates.deepseek.rules,
           opencode_go: failoverTemplates.opencode.rules,
+          command_code: failoverTemplates.commandcode.rules,
           gemini: failoverTemplates.gemini.rules,
         },
         convertedApiKeyPolicy: {
@@ -1464,6 +1471,7 @@ export function startConfigHotReload(
       resolve(candidate.rootDirectory, candidate.operations.upstreamManagement.templateFiles.deepseek),
       resolve(candidate.rootDirectory, candidate.operations.upstreamManagement.templateFiles.opencode),
       resolve(candidate.rootDirectory, candidate.operations.upstreamManagement.templateFiles.gemini),
+      resolve(candidate.rootDirectory, candidate.operations.upstreamManagement.templateFiles.commandcode),
     ]);
     return [...paths].sort().map((filePath) => {
       const stat = statSync(filePath);

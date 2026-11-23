@@ -1,0 +1,16 @@
+apiVersion: api2business.pikapython.com/v1
+kind: FailoverTemplate
+name: command-code-upstream-failover
+platform: command_code
+rules:
+- errorCode: 400
+  keywords:
+  - insufficient credits
+  - insufficient_credits
+  durationMinutes: 10
+  description: CommandCode 上游账号额度或信用不足时切号并冷却十分钟
+- errorCode: 503
+  keywords:
+  - Service temporarily unavailable
+  durationMinutes: 3
+  description: CommandCode 上游明确临时不可用时短暂切号
