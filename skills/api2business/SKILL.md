@@ -431,6 +431,8 @@ bun skills/api2business/scripts/api2business-cli.ts \
   - 只读聚合、CLI 参数、错误透明度、查询性能、分页、缓存诊断和文档收敛属于可直接修复范围。
   - 修改后执行对应测试、类型检查、配置校验和原运行面只读复验。
   - 不修改 Sub2API 源码；不借工具优化改变评分、路由、充值或业务授权。
-- 稳定经验更新本技能或上述 owning reference；一次性报告数据和回执留 TaskTree/post-task。
+- 稳定经验更新本技能或上述 owning reference；状态、截图、邮件和测试回执留 TaskTree；
+  一次性结论写 owning records 或 `/root/api2business/docs/records/`；原始数据写 Api2Business
+  忽略目录；根 `post-task/` 冻结只读，见 `/root/unidesk/docs/reference/post-task-ownership.md`。
 - 没有发现真实摩擦时不制造改动；发现后不得只登记 TODO 或拖到下一轮。
 - 报告说明本轮工具改进了什么、节省了哪些步骤或等待、是否已在本轮实际使用。
