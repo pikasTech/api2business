@@ -44,6 +44,11 @@ rules:
   - is not available
   durationMinutes: 3
   description: Gemini 上游明确返回模型或渠道不可用时短暂切号
+- errorCode: 404
+  keywords:
+  - "0 endpoints out of 2 requested are available matching your guardrail restrictions and data policy"
+  durationMinutes: 3
+  description: Gemini 上游明确因 guardrail 排除全部候选端点时短暂冷却并切号
 - errorCode: 429
   keywords:
   - rate limit
