@@ -134,6 +134,28 @@ test("priority history keeps an opencode automatic round in its own profile", as
   });
 });
 
+test("priority history keeps a configured custom scope without relabeling it as codex", async () => {
+  const store = { async priorityHistory() { return [
+    { id: "free-round", status: "applied", created_by: "v2-scheduler:opencode-free",
+      priorities: {},
+      result: { profiles: {}, changes: [] },
+      apply_result: { writeMode: "no-change", verification: "native-api-read-broker", completedChangedCount: 0, verifiedCount: 0 } },
+  ]; } } as unknown as OperationsStore;
+  const service = new OperationsService({
+    operations: {
+      auditLimit: 10,
+      upstreamSchedulingV2: { scopes: { "opencode-free": {} } },
+    },
+  } as unknown as AppConfig, store, unusedReads);
+  const result = await service.priorityHistory();
+  expect(result.records[0]).toMatchObject({
+    profile: "opencode-free",
+    profiles: ["opencode-free"],
+    created_by: "v2-scheduler:opencode-free",
+    profile_statuses: { "opencode-free": "applied" },
+  });
+});
+
 test("selects the latest successful USD snapshot by normalized upstream wallet", () => {
   expect(normalizeUpstreamWallet("https://wallet.example.com/v1/")).toBe("https://wallet.example.com");
   expect(normalizeUpstreamWallet("https://billing.example.com plus 0.05")).toBe("https://billing.example.com");

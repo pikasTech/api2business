@@ -102,15 +102,19 @@ test("priority history scope keeps matching rounds and discloses omissions", () 
     { id: "mixed", profile: "combined", profiles: ["codex", "deepseek"] },
     { id: "cx", profile: "codex", profiles: ["codex"] },
     { id: "oc", profile: "opencode", profiles: ["opencode"], created_by: "v2-scheduler:opencode" },
+    { id: "free", profile: "codex", profiles: ["codex"], created_by: "v2-scheduler:opencode-free" },
   ];
   const selected = selectPriorityHistory({ ok: true, records }, "deepseek");
   expect(selected.records).toEqual([
     { id: "ds", profile: "deepseek", profiles: ["deepseek"], created_by: "v2-scheduler:deepseek" },
     { id: "mixed", profile: "combined", profiles: ["codex", "deepseek"] },
   ]);
-  expect(selected).toMatchObject({ scope: "deepseek", matchedCount: 2, omittedCount: 2 });
+  expect(selected).toMatchObject({ scope: "deepseek", matchedCount: 2, omittedCount: 3 });
   expect(selectPriorityHistory({ records }, "opencode").records).toEqual([
     { id: "oc", profile: "opencode", profiles: ["opencode"], created_by: "v2-scheduler:opencode" },
+  ]);
+  expect(selectPriorityHistory({ records }, "opencode-free").records).toEqual([
+    { id: "free", profile: "codex", profiles: ["codex"], created_by: "v2-scheduler:opencode-free" },
   ]);
   expect(selectPriorityHistory({ records: [] }, "openai")).toMatchObject({ scope: "openai", matchedCount: 0 });
   expect(selectPriorityHistory({ records: [] }, "opencode-free")).toMatchObject({ scope: "opencode-free", matchedCount: 0 });

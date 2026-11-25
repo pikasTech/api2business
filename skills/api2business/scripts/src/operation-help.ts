@@ -2,7 +2,7 @@ const entry = "bun skills/api2business/scripts/api2business-cli.ts";
 
 const configOption = "可选；Api2Business 仓库根自动读取 config/api2business.yaml，其他 cwd 必须显式传入 owning YAML；查看帮助不加载配置";
 const overApiOption = "实际查询或写入必填；owning YAML 声明的绝对 HTTP(S) URL，不接受别名、布尔开关或隐式目标";
-const scopeOption = "可选；限定 codex、claude、grok、deepseek 或 gemini；生产排查应显式传入，避免把默认作用域当成所问作用域";
+const scopeOption = "可选；限定 owning YAML 中已配置的 scope，包括自定义 scope；生产排查应显式传入，避免把默认作用域当成所问作用域";
 const jsonOption = "输出结构化回执，便于 jq 只投影必要字段";
 
 export function priorityHistoryHelp(): Record<string, unknown> {
@@ -13,7 +13,7 @@ export function priorityHistoryHelp(): Record<string, unknown> {
     options: {
       "--config": "实际查询使用的 owning YAML；查看帮助不加载配置",
       "--over-api": "实际查询必填；owning YAML 声明的绝对 HTTP(S) URL，不接受别名或布尔开关",
-      "--scope": "可选；只保留 profile 或 profiles 含该作用域的轮次。取值 codex、claude、grok、deepseek、opencode、gemini",
+      "--scope": "可选；只保留 profile、profiles 或自动执行归因含该作用域的轮次；取值来自 owning YAML 的已配置 scope",
       "--account": "可选；正整数账号 ID。给出后只返回该账号的前后优先级，不返回其他账号或原始 priorities",
       "--json": "展开匹配轮次的完整回执，包括作用域、触发方式、终态及实际变更数",
     },
@@ -97,15 +97,15 @@ export function idleProbeHelp(action?: string): Record<string, unknown> {
   const selected = action && idleProbeActions.includes(action as typeof idleProbeActions[number]) ? action : null;
   if (action && !selected && action !== "--help") throw new Error(`unknown accounts idle-probe action ${action}`);
   const usageSuffix = selected === "history"
-    ? "[--scope codex|claude|grok|deepseek|gemini] [--page N]"
+    ? "[--scope <configured-scope>] [--page N]"
     : selected === "coverage"
-      ? "[--scope codex|claude|grok|deepseek|gemini] [--window-minutes N]"
+      ? "[--scope <configured-scope>] [--window-minutes N]"
       : selected === "reconcile"
-        ? "[--accounts <id-or-range,...>] [--scope codex|claude|grok|deepseek|gemini] [--confirm]"
+        ? "[--accounts <id-or-range,...>] [--scope <configured-scope>] [--confirm]"
         : selected === "run"
-          ? "[--accounts <id-or-range,...>] [--scope codex|claude|grok|deepseek|gemini] [--rounds 1..10] [--confirm]"
+          ? "[--accounts <id-or-range,...>] [--scope <configured-scope>] [--rounds 1..10] [--confirm]"
           : selected === "plan"
-            ? "[--accounts <id-or-range,...>] [--scope codex|claude|grok|deepseek|gemini]"
+            ? "[--accounts <id-or-range,...>] [--scope <configured-scope>]"
             : "plan|history|coverage|reconcile|run [options]";
   const options: Record<string, string> = {
     "--config": configOption,
@@ -178,8 +178,8 @@ export function upstreamSchedulingV2Help(action?: string, subaction?: string): R
     : selected === "snapshot"
       ? `${entry} --config <owning-YAML> upstream-scheduling-v2 snapshot [--scope <configured-scope>] [--refresh|--cache-only] --over-api <absolute-http(s)-URL> [--json]`
       : selected === "model-sync"
-        ? `${entry} --config <owning-YAML> upstream-scheduling-v2 model-sync ${modelSyncAction ?? "plan|run|history"} [--scope codex|claude|grok|deepseek|gemini] [--accounts <id-or-range,...>]${!modelSyncAction || modelSyncAction === "run" ? " [--confirm]" : ""}${!modelSyncAction || modelSyncAction === "history" ? " [--page N]" : ""} --over-api <absolute-http(s)-URL> [--json]`
-        : `${entry} --config <owning-YAML> upstream-scheduling-v2 ${path} [--scope codex|claude|grok|deepseek|gemini] --over-api <absolute-http(s)-URL> [--json]`;
+        ? `${entry} --config <owning-YAML> upstream-scheduling-v2 model-sync ${modelSyncAction ?? "plan|run|history"} [--scope <configured-scope>] [--accounts <id-or-range,...>]${!modelSyncAction || modelSyncAction === "run" ? " [--confirm]" : ""}${!modelSyncAction || modelSyncAction === "history" ? " [--page N]" : ""} --over-api <absolute-http(s)-URL> [--json]`
+        : `${entry} --config <owning-YAML> upstream-scheduling-v2 ${path} [--scope <configured-scope>] --over-api <absolute-http(s)-URL> [--json]`;
   return {
     ok: true,
     command: `upstream-scheduling-v2 ${path}`,

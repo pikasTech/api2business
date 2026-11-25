@@ -201,6 +201,20 @@ func TestCadenceScheduleOptionsReplaceOnlyOnStartup(t *testing.T) {
 	}
 }
 
+func TestPriorityCadenceOptionsReplaceOnlyOnStartup(t *testing.T) {
+	startup := cadenceScheduleOptions(v2PriorityAutomationWorkflowID("score", "opencode-free"), "queue", true)
+	if startup.WorkflowIDConflictPolicy != enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING {
+		t.Fatalf("priority automation startup must replace stale cadence inputs: %#v", startup)
+	}
+	watchdog := cadenceScheduleOptions(v2PriorityAutomationWorkflowID("score", "opencode-free"), "queue", false)
+	if watchdog.WorkflowIDConflictPolicy != enumspb.WORKFLOW_ID_CONFLICT_POLICY_UNSPECIFIED {
+		t.Fatalf("priority automation watchdog must not terminate a healthy cadence: %#v", watchdog)
+	}
+	if watchdog.ID != "score-upstream-scheduling-v2-opencode-free-priority-automation-v4" {
+		t.Fatalf("unexpected priority automation identity: %#v", watchdog)
+	}
+}
+
 func TestScopedAutomationIntervalHasSafeMinimum(t *testing.T) {
 	if got := scopedAutomationIntervalMilliseconds(1000); got != minimumScopedAutomationIntervalMilliseconds {
 		t.Fatalf("poll interval was not clamped: %d", got)

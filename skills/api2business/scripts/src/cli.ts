@@ -559,7 +559,8 @@ export function assertPriorityHistoryScope(scope: string | null): void {
 
 function priorityHistoryMatches(row: Record<string, unknown>, scope: string): boolean {
   if (row.profile === scope) return true;
-  return Array.isArray(row.profiles) && row.profiles.includes(scope);
+  if (Array.isArray(row.profiles) && row.profiles.includes(scope)) return true;
+  return String(row.created_by ?? "").match(/^v2-scheduler:([a-z0-9_-]+)$/)?.[1] === scope;
 }
 
 export function selectPriorityHistory(value: Record<string, unknown>, scope: string | null): Record<string, unknown> {
