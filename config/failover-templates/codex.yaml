@@ -36,6 +36,12 @@ rules:
   description: 上游实际返回 422 且统一包装为 upstream request failed 时短暂切号
 - errorCode: 429
   keywords:
+  - our free model is holding this lane shut locally
+  - Free usage limit reached
+  durationMinutes: 30
+  description: OpenCode Free 共享出口额度耗尽时冷却当前账号 30 分钟，避免短周期重试继续撞同一出口
+- errorCode: 429
+  keywords:
   - usage limit reached
   - API key 额度已用完
   - concurrency limit exceeded for account
