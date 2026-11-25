@@ -112,7 +112,9 @@ test("priority history scope keeps matching rounds and discloses omissions", () 
   expect(selectPriorityHistory({ records }, "opencode").records).toEqual([
     { id: "oc", profile: "opencode", profiles: ["opencode"], created_by: "v2-scheduler:opencode" },
   ]);
-  expect(() => selectPriorityHistory({ records: [] }, "openai")).toThrow("codex, claude, grok, deepseek, opencode, or gemini");
+  expect(selectPriorityHistory({ records: [] }, "openai")).toMatchObject({ scope: "openai", matchedCount: 0 });
+  expect(selectPriorityHistory({ records: [] }, "opencode-free")).toMatchObject({ scope: "opencode-free", matchedCount: 0 });
+  expect(() => selectPriorityHistory({ records: [] }, "OpenCode Free")).toThrow("--scope must be a configured lowercase scope name");
 });
 
 test("priority history human diagnostics expose query, snapshot age, block and recovery", () => {
@@ -139,7 +141,8 @@ test("pool quality reads the requested scope and runtime evidence accepts deepse
   expect(poolQualityScope(null, "deepseek")).toBe("deepseek");
   expect(poolQualityScope("grok", "grok")).toBe("grok");
   expect(poolQualityScope(null, "gemini")).toBe("gemini");
-  expect(() => poolQualityScope("openai", null)).toThrow("codex|claude|grok|deepseek|gemini");
+  expect(poolQualityScope(null, "opencode-free")).toBe("opencode-free");
+  expect(() => poolQualityScope("OpenAI", null)).toThrow("<configured-scope>");
   expect(() => poolQualityScope("codex", "claude")).toThrow("same scope");
   expect(assertSchedulingRuntimeQuery("131", "deepseek")).toEqual({ group: "131", platform: "deepseek" });
   expect(assertSchedulingRuntimeQuery("665", "gemini")).toEqual({ group: "665", platform: "gemini" });

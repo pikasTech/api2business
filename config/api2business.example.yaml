@@ -610,6 +610,21 @@ operations:
           idleProbe: true
           upstreamWrite: false
           modelSyncAutomation: false
+      opencode-free:
+        enabled: true
+        platform: openai
+        eligibleGroupIds: [ 697 ]
+        idleProbeIntervalSeconds: 180
+        idleProbeCacheMode: full
+        idleProbeModels: [ deepseek-v4.1-flash ]
+        features:
+          scoreRead: true
+          planRead: true
+          planWrite: false
+          priorityAutomation: true
+          idleProbe: true
+          upstreamWrite: false
+          modelSyncAutomation: false
       commandcode:
         enabled: true
         platform: command_code

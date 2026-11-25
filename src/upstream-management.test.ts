@@ -23,6 +23,7 @@ test("quota query derates each billed row before applying the live upstream rate
 
 test("upstream names preserve historical six-decimal rates", () => {
   expect(normalizeBaseUrl("https://api.example.com/")).toBe("https://api.example.com");
+  expect(normalizeBaseUrl("http://127.0.0.1:19094/v1")).toBe("http://127.0.0.1:19094/v1");
   expect(formatRate(0.045)).toBe("0.045");
   expect(formatUpstreamName("https://api.example.com/", "plus", 0.045)).toBe("https://api.example.com plus 0.045");
   expect(parseUpstreamName("https://api.example.com plus 0.045", "https://api.example.com")).toEqual({
@@ -232,8 +233,9 @@ test("usage isolates non-HTTPS targets and continues querying supported accounts
       async query() {
         return {
           rows: [
-            { id: 1, name: "internal", base_url: "http://127.0.0.1:19093/v1", api_key: "sk-internal", status: "active", schedulable: true, account_api_amount_usd_total: "0" },
+            { id: 1, name: "insecure", base_url: "http://api.example.com/v1", api_key: "sk-internal", status: "active", schedulable: true, account_api_amount_usd_total: "0" },
             { id: 2, name: "public", base_url: "https://api.example.com/v1", api_key: "sk-public", status: "active", schedulable: true, account_api_amount_usd_total: "1" },
+            { id: 3, name: "loopback", base_url: "http://127.0.0.1:19094/v1", api_key: "sk-loopback", status: "active", schedulable: true, account_api_amount_usd_total: "0" },
           ],
           queueDurationMs: 1,
           queryDurationMs: 2,
@@ -247,7 +249,7 @@ test("usage isolates non-HTTPS targets and continues querying supported accounts
       status() { throw new Error("not used"); },
     } as unknown as Sub2ApiReadClient;
     const result = await new UpstreamManagementService(config, reads).usage([]);
-    expect(result).toMatchObject({ ok: true, targetCount: 2, succeeded: 1, failed: 1 });
+    expect(result).toMatchObject({ ok: true, targetCount: 3, succeeded: 2, failed: 1 });
     const results = result.results as Array<Record<string, unknown>>;
     expect(results[0]).toMatchObject({
       accountId: 1,
@@ -255,6 +257,7 @@ test("usage isolates non-HTTPS targets and continues querying supported accounts
       error: "base_url 必须是没有凭据、查询参数和片段的 HTTPS URL",
     });
     expect(results[1]).toMatchObject({ accountId: 2, ok: true });
+    expect(results[2]).toMatchObject({ accountId: 3, ok: true });
     expect(fetchCount).toBeGreaterThan(0);
     expect(JSON.stringify(result)).not.toContain("sk-public");
   } finally {

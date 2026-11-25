@@ -371,8 +371,7 @@ export class IdleAccountProbeService {
     }
     const groupIds = scope?.eligibleGroupIds ?? this.config.sub2api.priorityPlan.eligibleGroupIds;
     const probePlatform = scope?.platform ?? this.config.sub2api.priorityPlan.platform;
-    const platformModels = policy.platformModels?.[probePlatform] ?? [];
-    const defaultProbeModel = platformModels[0] ?? policy.model;
+    const defaultProbeModel = scope?.idleProbeModels?.[0] ?? policy.platformModels?.[probePlatform]?.[0] ?? policy.model;
     const result = await this.reads.query<Record<string, unknown>>({
       key: JSON.stringify(["accounts.idle-probe.plan", scopeName ?? null, explicit, policy.idleSeconds, policy.candidateLimit]),
       kind: "accounts.idle-probe.plan",
@@ -392,10 +391,11 @@ export class IdleAccountProbeService {
     const candidates = result.rows
       .filter((row) => explicit.length > 0 || row.account_status === "active" && row.schedulable === true)
       .map((row) => {
+        const preferredModels = scope?.idleProbeModels ?? policy.platformModels?.[String(row.platform)] ?? [];
         const probeModels = selectIdleProbeModels(
           row.model_mapping_keys,
-          policy.platformModels?.[String(row.platform)]?.[0] ?? policy.model,
-          policy.platformModels?.[String(row.platform)] ?? [],
+          preferredModels[0] ?? policy.model,
+          preferredModels,
         );
         return {
           accountId: Number(row.account_id),
@@ -609,7 +609,8 @@ export class IdleAccountProbeService {
     const startedAt = Date.now();
     const policy = this.config.sub2api.idleProbe;
     const scope = scopeName ? this.config.operations.upstreamSchedulingV2?.scopes[scopeName] : undefined;
-    const defaultProbeModel = policy.platformModels?.[scope?.platform ?? this.config.sub2api.priorityPlan.platform]?.[0] ?? policy.model;
+    const defaultProbeModel = scope?.idleProbeModels?.[0]
+      ?? policy.platformModels?.[scope?.platform ?? this.config.sub2api.priorityPlan.platform]?.[0] ?? policy.model;
     const isolationScope: ProbeIsolationScope | undefined = scope
       ? { platform: scope.platform, eligibleGroupIds: scope.eligibleGroupIds, bindingGroupIds: [] }
       : undefined;

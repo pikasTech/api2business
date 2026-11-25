@@ -56,7 +56,7 @@ WITH internal_probe_keys AS (
   WHERE a.deleted_at IS NULL
     AND LOWER(TRIM(COALESCE(a.type, ''))) = 'apikey'
     AND NULLIF(a.credentials->>'base_url', '') IS NOT NULL
-    AND ($4::text IS NULL OR LOWER(TRIM(COALESCE(a.platform, ''))) = CASE $4::text WHEN 'codex' THEN 'openai' WHEN 'claude' THEN 'anthropic' ELSE LOWER($4::text) END)
+    AND ($4::text IS NULL OR LOWER(TRIM(COALESCE(a.platform, ''))) = LOWER($4::text))
     AND EXISTS (
       SELECT 1 FROM account_groups ag
       WHERE ag.account_id = a.id AND ag.group_id = ANY(string_to_array($2, ',')::bigint[])
@@ -291,7 +291,7 @@ function percentile(values: number[], ratio: number): number | null {
 }
 
 export interface PoolQualitySample {
-  platform: "codex" | "claude" | "grok" | "deepseek" | "gemini";
+  platform: string;
   sampledAt: string;
   rawCallCount: number;
   rawSuccessRequests: number;
@@ -318,6 +318,56 @@ export interface PoolQualitySample {
     completenessRate: number | null;
   };
   participation: PoolParticipation[];
+}
+
+export interface PoolQualityScope {
+  profile: string;
+  platform: string;
+  groupIds: number[];
+}
+
+const poolQualityPlatforms = new Set(["openai", "anthropic", "grok", "deepseek", "gemini"]);
+const canonicalPoolQualityProfiles = ["codex", "claude", "grok", "deepseek", "gemini"] as const;
+
+function legacyPoolQualityScope(config: AppConfig, profile: string): PoolQualityScope {
+  const policy = profile === "claude"
+    ? (config.sub2api.claudePriorityPlan ?? config.sub2api.priorityPlan)
+    : profile === "grok"
+      ? config.sub2api.grokPriorityPlan
+      : profile === "deepseek"
+        ? (config.sub2api.deepseekPriorityPlan ?? config.sub2api.priorityPlan)
+        : profile === "gemini"
+          ? (config.sub2api.geminiPriorityPlan ?? config.sub2api.priorityPlan)
+          : config.sub2api.priorityPlan;
+  const platform = profile === "claude" ? "anthropic" : profile === "codex" ? "openai" : profile;
+  return { profile, platform, groupIds: [...new Set(policy.eligibleGroupIds)].sort((a, b) => a - b) };
+}
+
+export function resolvePoolQualityScope(config: AppConfig, profile = "codex"): PoolQualityScope {
+  const configured = config.operations.upstreamSchedulingV2?.scopes[profile];
+  if (configured?.enabled) {
+    return {
+      profile,
+      platform: configured.platform,
+      groupIds: [...new Set(configured.eligibleGroupIds)].sort((a, b) => a - b),
+    };
+  }
+  if (!canonicalPoolQualityProfiles.includes(profile as typeof canonicalPoolQualityProfiles[number])) {
+    throw new Error(`pool quality scope is not configured: ${profile}`);
+  }
+  return legacyPoolQualityScope(config, profile);
+}
+
+export function configuredPoolQualityProfiles(config: AppConfig): string[] {
+  const profiles = new Set<string>(canonicalPoolQualityProfiles);
+  for (const [name, scope] of Object.entries(config.operations.upstreamSchedulingV2?.scopes ?? {})) {
+    if (scope.enabled && poolQualityPlatforms.has(scope.platform)) profiles.add(name);
+  }
+  return [...profiles];
+}
+
+export function supportsPoolQuality(platform: string): boolean {
+  return poolQualityPlatforms.has(platform);
 }
 
 const poolQualitySampleWindowsMs = [86_400_000, 7 * 86_400_000];
@@ -359,24 +409,16 @@ export async function collectPoolQualitySample(
   config: AppConfig,
   reads: Sub2ApiReadClient,
   sampledAt = new Date().toISOString(),
-  platform: "codex" | "claude" | "grok" | "deepseek" | "gemini" = "codex",
+  profile = "codex",
 ): Promise<PoolQualitySample> {
   const recentCallLimit = 1000;
-  const policy = platform === "claude"
-    ? (config.sub2api.claudePriorityPlan ?? config.sub2api.priorityPlan)
-    : platform === "grok"
-      ? config.sub2api.grokPriorityPlan
-      : platform === "deepseek"
-        ? (config.sub2api.deepseekPriorityPlan ?? config.sub2api.priorityPlan)
-        : platform === "gemini"
-          ? (config.sub2api.geminiPriorityPlan ?? config.sub2api.priorityPlan)
-        : config.sub2api.priorityPlan;
-  const groupIds = [...new Set(policy.eligibleGroupIds)].sort((a, b) => a - b);
+  const scope = resolvePoolQualityScope(config, profile);
+  const groupIds = scope.groupIds;
   const sampledAtMs = Date.parse(sampledAt);
   if (!Number.isFinite(sampledAtMs)) throw new Error("pool quality sampledAt is invalid");
   const normalizedSampledAt = new Date(sampledAtMs).toISOString();
-  const baseParameters = [recentCallLimit, groupIds.join(","), normalizedSampledAt, platform];
-  const rows = await readPoolQualitySampleRows(reads, platform, recentCallLimit, groupIds, normalizedSampledAt, sampledAtMs, baseParameters);
+  const baseParameters = [recentCallLimit, groupIds.join(","), normalizedSampledAt, scope.platform];
+  const rows = await readPoolQualitySampleRows(reads, profile, recentCallLimit, groupIds, normalizedSampledAt, sampledAtMs, baseParameters);
   const weightedRows: Row[] = rows.map((row, index): Row => ({
     ...row,
     sampleWeight: recentCallBucketWeight(index + 1, config.sub2api.scoreSamplePolicy),
@@ -416,8 +458,8 @@ export async function collectPoolQualitySample(
   }
   const scored = scoreRecentDatabaseRow({
     account_id: 0,
-    account_name: platform === "claude" ? "Claude" : platform === "grok" ? "Grok" : platform === "deepseek" ? "DeepSeek" : platform === "gemini" ? "Gemini" : "Codex",
-    platform: platform === "claude" ? "anthropic" : platform === "grok" ? "grok" : platform === "deepseek" ? "deepseek" : platform === "gemini" ? "gemini" : "openai",
+    account_name: profile,
+    platform: scope.platform,
     account_type: "apikey",
     status: "active", schedulable: true, priority: 0, group_ids: groupIds, group_names: ["混池", "自用"],
     success_requests: weightedCount(successes), failure_requests: weightedCount(failures),
@@ -433,7 +475,7 @@ export async function collectPoolQualitySample(
     token_count: 0, api_amount_usd: 0,
   }, recentCallLimit, config.sub2api.poolScorePolicy);
   return {
-    platform,
+    platform: profile,
     sampledAt,
     rawCallCount: rows.length,
     rawSuccessRequests: successes.length,
@@ -483,7 +525,7 @@ export async function collectPoolQualityErrors(
   reads: Sub2ApiReadClient,
   input: {
     sampledAt: string;
-    platform?: "codex" | "claude" | "grok" | "deepseek" | "gemini";
+    platform?: string;
     page: number;
     pageSize: number;
     filter: PoolQualityErrorFilter;
@@ -491,7 +533,8 @@ export async function collectPoolQualityErrors(
   },
 ) {
   const recentCallLimit = 1000;
-  const platform = input.platform ?? "codex";
+  const profile = input.platform ?? "codex";
+  const scope = resolvePoolQualityScope(config, profile);
   if (!Number.isInteger(input.page) || input.page < 1) throw new Error("pool quality error page must be a positive integer");
   if (!Number.isInteger(input.pageSize) || input.pageSize < 1 || input.pageSize > 100) {
     throw new Error("pool quality error page size must be from 1 to 100");
@@ -502,25 +545,16 @@ export async function collectPoolQualityErrors(
   const sampledAtMs = Date.parse(input.sampledAt);
   if (!Number.isFinite(sampledAtMs)) throw new Error("pool quality sampledAt is invalid");
   const sampledAt = new Date(sampledAtMs).toISOString();
-  const policy = platform === "claude"
-    ? (config.sub2api.claudePriorityPlan ?? config.sub2api.priorityPlan)
-    : platform === "grok"
-      ? config.sub2api.grokPriorityPlan
-      : platform === "deepseek"
-        ? (config.sub2api.deepseekPriorityPlan ?? config.sub2api.priorityPlan)
-        : platform === "gemini"
-          ? (config.sub2api.geminiPriorityPlan ?? config.sub2api.priorityPlan)
-        : config.sub2api.priorityPlan;
-  const groupIds = [...new Set(policy.eligibleGroupIds)].sort((a, b) => a - b);
+  const groupIds = scope.groupIds;
   const offset = (input.page - 1) * input.pageSize;
-  const parameters = [recentCallLimit, groupIds.join(","), sampledAt, platform, input.filter, input.pageSize, offset];
+  const parameters = [recentCallLimit, groupIds.join(","), sampledAt, scope.platform, input.filter, input.pageSize, offset];
   let query: Awaited<ReturnType<typeof reads.query<Row>>> | undefined;
   let databaseQueries = 0;
   let queueDurationMs = 0;
   let queryDurationMs = 0;
   for (const windowMs of poolQualitySampleWindowsMs) {
     query = await reads.query<Row>({
-      key: JSON.stringify(["pool-quality-errors-bounded", platform, recentCallLimit, groupIds, sampledAt, input.filter, input.page, input.pageSize, windowMs]),
+      key: JSON.stringify(["pool-quality-errors-bounded", profile, scope.platform, recentCallLimit, groupIds, sampledAt, input.filter, input.page, input.pageSize, windowMs]),
       kind: "pool-quality-errors",
       priority: input.priority ?? "manual",
       cacheMode: "prefer-cache",
@@ -536,7 +570,7 @@ export async function collectPoolQualityErrors(
   // the all-history fallback. Sparse scopes must never silently lose requests.
   if (Number(query?.rows[0]?.recent_count ?? 0) < recentCallLimit) {
     query = await reads.query<Row>({
-      key: JSON.stringify(["pool-quality-errors", platform, recentCallLimit, groupIds, sampledAt, input.filter, input.page, input.pageSize]),
+      key: JSON.stringify(["pool-quality-errors", profile, scope.platform, recentCallLimit, groupIds, sampledAt, input.filter, input.page, input.pageSize]),
       kind: "pool-quality-errors", priority: input.priority ?? "manual", cacheMode: "prefer-cache",
       sql: poolQualityErrorsSql, parameters,
     });
@@ -550,7 +584,8 @@ export async function collectPoolQualityErrors(
   const modelDistribution = Array.isArray(result.model_distribution) ? result.model_distribution : [];
   return {
     ok: true,
-    platform,
+    platform: profile,
+    upstreamPlatform: scope.platform,
     sampledAt,
     recentCallLimit,
     groupIds,

@@ -9,7 +9,7 @@ export function priorityHistoryHelp(): Record<string, unknown> {
   return {
     ok: true,
     command: "priority history",
-    usage: `${entry} --config <owning-YAML> priority history --over-api <absolute-http(s)-URL> [--scope codex|claude|grok|deepseek|opencode|gemini] [--account <positive-id>] [--json]`,
+    usage: `${entry} --config <owning-YAML> priority history --over-api <absolute-http(s)-URL> [--scope <configured-scope>] [--account <positive-id>] [--json]`,
     options: {
       "--config": "实际查询使用的 owning YAML；查看帮助不加载配置",
       "--over-api": "实际查询必填；owning YAML 声明的绝对 HTTP(S) URL，不接受别名或布尔开关",
@@ -174,9 +174,9 @@ export function upstreamSchedulingV2Help(action?: string, subaction?: string): R
     if (!modelSyncAction || modelSyncAction === "history") options["--page"] = "可选；正整数页码，省略为 1";
   }
   const usage = selected === "priority-run"
-    ? `${entry} --config <owning-YAML> upstream-scheduling-v2 priority-run --scope codex|claude|grok|deepseek|opencode|gemini [--confirm] --over-api <absolute-http(s)-URL> [--json]`
+    ? `${entry} --config <owning-YAML> upstream-scheduling-v2 priority-run --scope <configured-scope> [--confirm] --over-api <absolute-http(s)-URL> [--json]`
     : selected === "snapshot"
-      ? `${entry} --config <owning-YAML> upstream-scheduling-v2 snapshot [--scope codex|claude|grok|deepseek|gemini] [--refresh|--cache-only] --over-api <absolute-http(s)-URL> [--json]`
+      ? `${entry} --config <owning-YAML> upstream-scheduling-v2 snapshot [--scope <configured-scope>] [--refresh|--cache-only] --over-api <absolute-http(s)-URL> [--json]`
       : selected === "model-sync"
         ? `${entry} --config <owning-YAML> upstream-scheduling-v2 model-sync ${modelSyncAction ?? "plan|run|history"} [--scope codex|claude|grok|deepseek|gemini] [--accounts <id-or-range,...>]${!modelSyncAction || modelSyncAction === "run" ? " [--confirm]" : ""}${!modelSyncAction || modelSyncAction === "history" ? " [--page N]" : ""} --over-api <absolute-http(s)-URL> [--json]`
         : `${entry} --config <owning-YAML> upstream-scheduling-v2 ${path} [--scope codex|claude|grok|deepseek|gemini] --over-api <absolute-http(s)-URL> [--json]`;

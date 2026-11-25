@@ -18,7 +18,9 @@ interface FakeState {
   userUpdates: Row[];
   balanceAdds: Array<{ userId: number; amountUsd: number; notes: string }>;
   accountUpdates: Row[];
+  accountLookup: Record<number, Row>;
   requestTimeouts: Array<{ path: string; timeoutMs: number }>;
+  keyDeletes: number[];
   rejectKeyCreateOnce?: string;
 }
 
@@ -106,6 +108,12 @@ class FakeClient {
       Object.assign(this.state.keys[0]!, payload);
       return this.state.keys[0] as T;
     }
+    if (method === "DELETE" && /^\/keys\/\d+$/u.test(path)) {
+      const keyId = Number(path.split("/").at(-1));
+      this.state.keys = this.state.keys.filter((item) => Number(item.id) !== keyId);
+      this.state.keyDeletes.push(keyId);
+      return { ok: true } as T;
+    }
     throw new Error(`unexpected mutation ${method} ${path}`);
   }
 
@@ -116,9 +124,9 @@ class FakeClient {
     return user as never;
   }
 
-  async getAccount(_accountId?: number, timeoutMs?: number) {
+  async getAccount(accountId?: number, timeoutMs?: number) {
     if (timeoutMs !== undefined) this.state.requestTimeouts.push({ path: "get-account", timeoutMs });
-    return this.state.account;
+    return accountId === undefined ? this.state.account : this.state.accountLookup[accountId] ?? this.state.account;
   }
 
   async listGroupAccounts(groupId: number, _platform?: string, timeoutMs?: number) {
@@ -141,7 +149,9 @@ function fixture() {
     userUpdates: [],
     balanceAdds: [],
     accountUpdates: [],
+    accountLookup: {},
     requestTimeouts: [],
+    keyDeletes: [],
   };
   const config = {
     rootDirectory,
@@ -668,6 +678,33 @@ test("probe isolation does not rotate a key for unrelated HTTP 409 conflicts", a
   await expect(service.ensure(42)).rejects.toThrow("idempotent request is still processing");
   expect(state.keyCreates).toHaveLength(0);
   expect(state.keys).toHaveLength(0);
+});
+
+test("probe isolation reclaims an inactive account probe key when the key limit is reached", async () => {
+  const { rootDirectory, state, service } = fixture();
+  state.keys.push({ id: 90, name: "api2business-probe-7", group_id: 50, status: "active" });
+  state.accountLookup[7] = { id: 7, status: "suspended", schedulable: false };
+  state.rejectKeyCreateOnce = "Sub2API POST /keys failed: HTTP 400 API_KEY_COUNT_EXCEEDED api key count limit reached";
+
+  const result = await service.ensure(42);
+
+  expect(result).toMatchObject({ accountId: 42, keyCreated: true });
+  expect(state.keyDeletes).toEqual([90]);
+  expect(state.keyCreates).toEqual([expect.objectContaining({ name: "api2business-probe-42", group_id: 51 })]);
+  const secret = JSON.parse(readFileSync(join(rootDirectory, ".state/idle-probe/probe-keys.json"), "utf8")) as { records: Record<string, Row> };
+  expect(secret.records["42"]).toMatchObject({ ready: true });
+});
+
+test("probe isolation keeps active account keys when the key limit is reached", async () => {
+  const { state, service } = fixture();
+  state.keys.push({ id: 91, name: "api2business-probe-8", group_id: 52, status: "active" });
+  state.accountLookup[8] = { id: 8, status: "active", schedulable: true };
+  state.rejectKeyCreateOnce = "Sub2API POST /keys failed: HTTP 400 API_KEY_COUNT_EXCEEDED api key count limit reached";
+
+  await expect(service.ensure(42)).rejects.toThrow("api key count limit reached");
+  expect(state.keyDeletes).toEqual([]);
+  expect(state.keys).toEqual([expect.objectContaining({ id: 91, name: "api2business-probe-8" })]);
+  expect(state.keyCreates).toHaveLength(0);
 });
 
 test("probe isolation resumes at account binding after credentials were persisted", async () => {

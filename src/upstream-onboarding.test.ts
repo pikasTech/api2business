@@ -52,6 +52,30 @@ test("initialization preserves business groups, verifies templates and forces Re
   expect(result.accounts[0]).toMatchObject({ responsesVerified: true, probeReady: true });
 });
 
+test("initialization selects the scope whose eligible groups contain the account", async () => {
+  const config = loadConfig("config/api2business.example.yaml");
+  const reads = { async query<T extends Row>(request: Sub2ApiReadRequest): Promise<Sub2ApiReadResult<T>> {
+    const rows = request.kind.endsWith("targets")
+      ? [{ id: "1628", platform: "openai", base_url: "http://127.0.0.1:19095/v1",
+        pool_mode: false, temp_enabled: true,
+        temp_rules: config.operations.upstreamManagement.failoverRulesByPlatform.openai,
+        responses_mode: null, group_ids: ["697"] }]
+      : [{ platform: "openai", pool_mode: false, temp_enabled: true,
+        temp_rules: config.operations.upstreamManagement.failoverRulesByPlatform.openai,
+        responses_mode: "force_responses", group_ids: ["697", "701"], is_exclusive: true,
+        probe_group_status: "active", member_count: "1" }];
+    return { rows: rows as unknown as T[], cached: false, deduplicated: false,
+      queueDurationMs: 0, queryDurationMs: 0, totalDurationMs: 0, queryStartedAt: "", queryCompletedAt: "" };
+  } };
+
+  const result = await initializeUpstreams(config, reads, { configureApiKeyAccounts: async () => ({ ok: true }) }, {
+    ensure: async (accountId) => ({ accountId, groupId: 701, keyCreated: false }),
+  }, [1628]);
+
+  expect(result).toMatchObject({ ok: true, verifiedCount: 1, failedCount: 0 });
+  expect(result.accounts[0]).toMatchObject({ scope: "opencode-free", automaticProbeEnabled: true, probeReady: true });
+});
+
 test("Responses readback mismatch is partial even when native update was accepted", async () => {
   const f = fixture(true);
   const result = await initializeUpstreams(f.config, f.reads, f.runtime, f.isolation, [10, 11, 12]);

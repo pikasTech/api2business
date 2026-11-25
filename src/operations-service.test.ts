@@ -573,7 +573,7 @@ test("pool quality keeps successful scopes when one platform times out", async (
   };
   const reads = {
     async query(input: { parameters: unknown[] }) {
-      if (input.parameters[3] === "codex") {
+      if (input.parameters[3] === "openai") {
         throw new Error("sub2api_read_query_timeout: query pool-quality-sample exceeded 15000ms");
       }
       return {
@@ -588,10 +588,10 @@ test("pool quality keeps successful scopes when one platform times out", async (
   const partial = await service.samplePoolQuality();
   expect(saved).toEqual(["claude", "grok", "deepseek", "gemini"]);
   expect(partial.ok).toBe(false);
-  expect(partial.failures).toEqual([{
-    platform: "codex",
-    error: "sub2api_read_query_timeout: query pool-quality-sample exceeded 15000ms",
-  }]);
+  expect(partial.failures).toEqual([
+    { platform: "codex", error: "sub2api_read_query_timeout: query pool-quality-sample exceeded 15000ms" },
+    { platform: "opencode-free", error: "sub2api_read_query_timeout: query pool-quality-sample exceeded 15000ms" },
+  ]);
   const failingReads = {
     async query() { throw new Error("sub2api_read_query_timeout: query pool-quality-sample exceeded 15000ms"); },
     status() { throw new Error("not used"); },
