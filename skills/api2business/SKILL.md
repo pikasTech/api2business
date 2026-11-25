@@ -192,7 +192,7 @@ bun skills/api2business/scripts/api2business-cli.ts --config config/api2business
 - 单账号优先级前后变化使用
   `priority history --account <正整数ID> --over-api <absolute-http(s)-URL>`。
   - 省略 `--account` 只返回有界轮次摘要，不能判断某个账号是否降级。
-  - `--scope codex|claude|grok|deepseek|opencode|gemini` 只保留该作用域轮次。
+  - `--scope <configured-scope>` 只保留该作用域轮次；取值来自 owning YAML 的已配置 scope。
   - 人类输出披露 `omitted` 与 `displayOmitted`；完整对象使用 `--json`。
   - 过载计入、切号抑制和证据边界只见
     [过载扣分与优先级证据](references/upstream-scheduling.md#过载扣分与优先级证据)。
@@ -208,7 +208,7 @@ bun skills/api2business/scripts/api2business-cli.ts --config config/api2business
   陈旧时最多等待约 10 秒让服务后台重建完成并返回最新回执，重建失败或超时则原样返回陈旧回执；需要同步重建时追加
   `--refresh`，只读取最近成功的读模型缓存时追加 `--cache-only`，两者不可同时使用。`cache.state=stale` 且
   `cache.complete=true` 只表示读模型仍在刷新，不等于数据缺失或刷新失败；用同一入口重读/等待即可，不要据此误报故障。使用
-  `upstream-scheduling-v2 priority-run --scope <codex|claude|grok|deepseek|opencode|gemini> --confirm --over-api <absolute-http(s)-URL>`
+  `upstream-scheduling-v2 priority-run --scope <configured-scope> --confirm --over-api <absolute-http(s)-URL>`
   通过原生 worker 执行一次指定作用域的手动优先级调整；作用域的
   `scoreRead`、`planRead`、`planWrite`、`priorityAutomation`、`idleProbe` 和
   `upstreamWrite` 只认 owning YAML；Codex、Claude、Grok、DeepSeek、Gemini 使用同一套平等作用域接口。
@@ -336,7 +336,7 @@ bun skills/api2business/scripts/api2business-cli.ts --config config/api2business
   读取、原生 bulk merge、单账号失败边界和写后回读唯一见
   [上游与调度](references/upstream-scheduling.md)。
 - V2 作用域模型同步使用以下 CLI：
-  - `upstream-scheduling-v2 model-sync plan --scope <codex|claude|grok|deepseek|gemini> --over-api <absolute-http(s)-URL>` 只读生成下一批计划；
+  - `upstream-scheduling-v2 model-sync plan --scope <configured-scope> --over-api <absolute-http(s)-URL>` 只读生成下一批计划；
   - `upstream-scheduling-v2 model-sync run --scope <scope> [--accounts <id,...>] --confirm --over-api <absolute-http(s)-URL>` 执行手动批次；
   - `upstream-scheduling-v2 model-sync history --scope <scope> --over-api <absolute-http(s)-URL>` 查询轮次和账号明细。
   - 自动批次上限和间隔由 `operations.upstreamSchedulingV2.modelSync` 配置；自动开关只认各作用域的 `features.modelSyncAutomation`，每批最多 10 个，上一批完成后开始计时。
@@ -364,7 +364,7 @@ bun skills/api2business/scripts/api2business-cli.ts --config config/api2business
     --scope grok
   ```
 
-- `--scope` 可选，只接受 owning YAML 中已启用的 `codex`、`claude`、`grok`、`deepseek`、`opencode` 或 `gemini` 作用域；CLI 将其写入
+- `--scope` 可选，只接受 owning YAML 中已启用的作用域（含自定义 scope）；CLI 将其写入
   V2 深链查询参数，并在 stderr 输出带 profile、scope 和 phase 的短进度行，避免临时脚本拼接 URL
   或长时间无输出。省略时使用配置中的默认作用域。
 - 成功回执的 `retainedScreenshots` 按 profile 和 scope 保留桌面与窄屏 PNG。

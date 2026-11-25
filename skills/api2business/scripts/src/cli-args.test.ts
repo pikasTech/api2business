@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { assertErrorsQueryBounds, assertObservationWindow, assertSchedulingRuntimeQuery, normalizeCliArgs, parseArgs, poolQualityScope, priorityHistoryDiagnostics, selectPriorityHistory, summarizeWorkflowStatus } from "./cli";
-import { operationHelp, upstreamsUsageHelp } from "./operation-help";
+import { operationHelp, priorityHistoryHelp, upstreamsUsageHelp } from "./operation-help";
 import { webProbeElementArgs } from "./web-screenshot";
 
 test("historical balance CLI accepts signed USD without consuming the next option", () => {
@@ -69,15 +69,26 @@ test("operation help returns action-specific contracts without loading config", 
   expect(coverage).toMatchObject({ ok: true, command: "accounts idle-probe coverage" });
   expect(String(coverage?.usage)).toContain("accounts idle-probe coverage");
   expect(String(coverage?.usage)).toContain("--window-minutes");
+  expect(JSON.stringify(coverage)).toContain("<configured-scope>");
+  expect(JSON.stringify(coverage)).not.toContain("codex|claude|grok");
 
   const snapshot = operationHelp(["upstream-scheduling-v2", "--scope", "codex", "snapshot", "--help"]);
   expect(snapshot).toMatchObject({ ok: true, command: "upstream-scheduling-v2 snapshot" });
   expect(String(snapshot?.usage)).toContain("--cache-only");
   expect(String(snapshot?.verification)).toContain("complete=true");
+  expect(JSON.stringify(snapshot)).toContain("<configured-scope>");
+  expect(JSON.stringify(snapshot)).not.toContain("codex|claude|grok");
 
   const priorityRun = operationHelp(["upstream-scheduling-v2", "priority-run", "--help"]);
   expect(priorityRun).toMatchObject({ ok: true, command: "upstream-scheduling-v2 priority-run" });
   expect(String(priorityRun?.usage)).toContain("--confirm");
+  expect(JSON.stringify(priorityRun)).toContain("<configured-scope>");
+  expect(JSON.stringify(priorityRun)).not.toContain("codex|claude|grok");
+
+  const priorityHistory = priorityHistoryHelp();
+  expect(priorityHistory).toMatchObject({ ok: true, command: "priority history" });
+  expect(JSON.stringify(priorityHistory)).toContain("owning YAML");
+  expect(JSON.stringify(priorityHistory)).not.toContain("codex、claude");
 
   const rank = operationHelp(["scores", "rank", "--help"]);
   expect(rank).toMatchObject({ ok: true, command: "scores rank" });

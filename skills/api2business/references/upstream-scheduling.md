@@ -502,7 +502,7 @@
     内的值保持严格递增，超出 top-k 的账号仍落在 `maximumPriority` 尾部。
     可以独立打开 `features.priorityAutomation` 和 `features.idleProbe`；关闭探活的作用域
     快照和池质量读取不创建探活记录。手动核验任一作用域时使用
-    `accounts idle-probe plan|reconcile|run --scope <codex|claude|grok|deepseek|gemini> --over-api <absolute-http(s)-URL>`；确认
+    `accounts idle-probe plan|reconcile|run --scope <configured-scope> --over-api <absolute-http(s)-URL>`；确认
     普通请求记录、`ordinaryLogRecorded` 和轮次记录成功后，才打开对应作用域的探活开关。
   - Grok 评分和优先级的质量权重由 owning YAML 的 `grokScorePolicy` 与
     `grokPriorityPlan` 独立控制。当前生产配置将优先级质量权重设为可靠性 70、延迟 30、
@@ -860,7 +860,7 @@
   个状态来源，计划 API 仅用于 CLI/API 审计。
 - 探活历史查询按作用域功能开关和平台读取，不能用 Codex/Grok 的质量档位过滤掉已启用的
   Claude 记录；读模型首次为空或过期时，应等待后台刷新后按同一作用域再次读取。
-- `accounts idle-probe coverage --scope <codex|claude|grok|deepseek|gemini> --window-minutes <N> --over-api <absolute-http(s)-URL>`
+- `accounts idle-probe coverage --scope <configured-scope> --window-minutes <N> --over-api <absolute-http(s)-URL>`
   是按作用域核对专用 Key 覆盖的唯一 CLI 入口；coverage 的平台和 eligible groups 必须
   从该作用域 YAML 传入，不能固定查询 OpenAI。短窗口缺失只表示该窗口没有专用记录，需
   同时查看 24 小时 coverage 和账号快照，不能把短窗口缺失当作账号永久无样本。
@@ -870,7 +870,7 @@
   - 裁切发生在 settle 之后。
   - 同来源截图串行执行。
   - Cookie 只留在进程环境，不进 argv、日志或磁盘。
-- 轮次摘要使用 `priority history --scope <codex|claude|grok|deepseek|opencode|gemini>`。
+- 轮次摘要使用 `priority history --scope <configured-scope>`；取值来自 owning YAML 的已配置 scope。
   - 人类输出有界，并披露 `omitted` 与 `displayOmitted`。
   - 每轮第二行显示 `query`、`snapshotAge`、`reason` 和 `recovery`；失败轮次不得只显示状态。
   - 单账号前后值仍使用 `--account`。
