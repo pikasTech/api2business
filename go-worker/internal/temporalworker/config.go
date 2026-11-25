@@ -190,6 +190,9 @@ func LoadConfig(args []string, get func(string) string) (Config, error) {
 		if intervalSeconds <= 0 {
 			return Config{}, fmt.Errorf("idle probe interval for scope %s must be positive", name)
 		}
+		if name == "opencode-free" && scope.Enabled && scope.Features.IdleProbe && intervalSeconds < 3600 {
+			return Config{}, fmt.Errorf("idle probe interval for scope opencode-free must be at least 3600 seconds")
+		}
 		v2IdleProbeIntervals[name] = intervalSeconds
 		if raw.Operations.UpstreamSchedulingV2.Enabled {
 			if !scope.Enabled {

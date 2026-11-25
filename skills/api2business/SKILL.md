@@ -219,6 +219,9 @@ bun skills/api2business/scripts/api2business-cli.ts --config config/api2business
   `operations.upstreamSchedulingV2.scopes.<scope>.idleProbeIntervalSeconds`；未声明时才
   回退到 `sub2api.idleProbe.intervalSeconds`，具体生效与工作流替换规则见
   `references/upstream-scheduling.md`。
+  `opencode-free` 共享出口固定每轮最多 1 个候选且周期不少于 3600 秒；lane 锁、时间证据和
+  手动全量探活边界见
+  [OpenCode Free 共享出口 lane 锁](references/upstream-scheduling.md#opencode-free-共享出口-lane-锁)。
 - 充值候选使用 `upstreams recharge-candidates --over-api <absolute-http(s)-URL>`。
 - 历史钱包回填使用 `upstreams usage-cache restore`，必须以 `--since <ISO时间>` 提供原观测时刻。
   - `upstreams usage-cache restore --help` 提供独立参数帮助，无需读取配置或连接运行面。
@@ -233,6 +236,8 @@ bun skills/api2business/scripts/api2business-cli.ts --config config/api2business
 - CLI 在提交传输异常时会回显本次幂等键和“结果未知”提示；只有复用该键重试，不能把传输异常当成未提交而生成新键。
 - 精确错误链使用 `errors diagnose --request-id <request-id> --over-api <absolute-http(s)-URL>`。
   - `errors diagnose` 的链条在顶层 `chains`，`errors inspect` 在 `diagnosis.chains`；脚本解析前先按命令选对层级。
+  - OpenCode Free 的 `lane_locked` 证据、时间字段和共享出口归因见
+    [OpenCode Free 共享出口 lane 锁](references/upstream-scheduling.md#opencode-free-共享出口-lane-锁)。
 - 判断 502/503 是否发生在响应写出后，使用 `errors commit-stage --request-id <request-id> --over-api <absolute-http(s)-URL>`；只投影系统日志中的提交阶段标记，不读取完整日志正文。
 - 按模型定位使用 `errors diagnose --model <exact-model-id> --limit <N> --top <N> --over-api <absolute-http(s)-URL>`。
 - 单请求排障使用 `errors inspect --request-id <request-id> --over-api <absolute-http(s)-URL>`。

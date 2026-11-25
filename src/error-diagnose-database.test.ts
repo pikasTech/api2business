@@ -32,6 +32,8 @@ test("error diagnosis uses one bounded query for signatures and failover chains"
   expect(errorDiagnoseQuery).not.toContain("account_groups");
   expect(errorDiagnoseQuery).not.toContain("api_key_prefix");
   expect(errorDiagnoseQuery).toContain("message_text LIKE '%insufficient credits%'");
+  expect(errorDiagnoseQuery).toContain("our free model is holding this lane shut locally");
+  expect(errorDiagnoseQuery).toContain("THEN 'lane_locked'");
 });
 
 test("error diagnosis projection exposes bounded facts without raw payloads", () => {
@@ -71,4 +73,32 @@ test("error diagnosis projection exposes bounded facts without raw payloads", ()
   ]);
   expect(JSON.stringify(projected)).not.toContain("errorBody");
   expect(JSON.stringify(projected)).not.toContain("errorMessage");
+});
+
+test("error diagnosis classifies OpenCode Free lane locks before generic 429s", () => {
+  const projected = projectErrorDiagnoseRow({
+    sampled_error_rows: 1,
+    distinct_requests: 1,
+    customer_visible_requests: 1,
+    signatures: [{ signature: "429:upstream:upstream_error:-:lane_locked", stablePhrase: "lane_locked" }],
+    chains: [{
+      requestId: "request-lane",
+      attempts: [{
+        accountId: 1641,
+        statusCode: 429,
+        upstreamStatusCode: 429,
+        upstreamErrorDetail: "Our free model is holding this lane shut locally. Free usage limit reached. recorded at 2026-11-25T09:30:00Z lifts at 2026-11-25T10:00:00Z",
+      }],
+    }],
+  });
+
+  const attempts = ((projected.chains as Array<Record<string, unknown>>)[0].attempts as Array<Record<string, unknown>>);
+  expect(attempts[0].laneLock).toMatchObject({
+    classification: "lane_locked",
+    failureScope: "shared-outlet",
+    accountScoped: false,
+    accountSwitchCanBypass: false,
+    recordedAt: "2026-11-25T09:30:00.000Z",
+    liftsAt: "2026-11-25T10:00:00.000Z",
+  });
 });

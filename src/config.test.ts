@@ -119,7 +119,7 @@ describe("upstream scheduling v2 platform validation", () => {
         evidenceTargetAttempts: 50, evidenceTargetFirstTokenSamples: 20,
         minimumPriority: 100, maximumPriority: 300,
       },
-      idleProbeCacheMode: "full", idleProbeCandidateLimit: 20,
+      idleProbeIntervalSeconds: 3600, idleProbeCacheMode: "full", idleProbeCandidateLimit: 1,
       idleProbeModels: ["deepseek-v4.1-flash"],
       features: { idleProbe: true, priorityAutomation: true, modelSyncAutomation: false },
     });
@@ -138,6 +138,21 @@ describe("upstream scheduling v2 platform validation", () => {
       policy.eligibleGroupIds = [2];
     })).toThrow("operations.upstreamSchedulingV2.scopes.opencode-free.priorityPlan.eligibleGroupIds must match");
   });
+
+  test("enforces OpenCode Free shared-outlet probe limits", () => {
+    expect(() => loadExampleWithMutation((raw) => {
+      raw.operations.upstreamSchedulingV2.scopes["opencode-free"].idleProbeCandidateLimit = 20;
+    })).toThrow("idleProbeCandidateLimit must be 1 for shared-outlet protection");
+    expect(() => loadExampleWithMutation((raw) => {
+      delete raw.operations.upstreamSchedulingV2.scopes["opencode-free"].idleProbeCandidateLimit;
+    })).toThrow("idleProbeCandidateLimit must be 1 for shared-outlet protection");
+    expect(() => loadExampleWithMutation((raw) => {
+      raw.operations.upstreamSchedulingV2.scopes["opencode-free"].idleProbeIntervalSeconds = 180;
+    })).toThrow("idleProbeIntervalSeconds must be at least 3600 for shared-outlet protection");
+    expect(() => loadExampleWithMutation((raw) => {
+      delete raw.operations.upstreamSchedulingV2.scopes["opencode-free"].idleProbeIntervalSeconds;
+    })).toThrow("idleProbeIntervalSeconds must be at least 3600 for shared-outlet protection");
+  }, 15000);
 });
 
 describe("model sync policy validation", () => {

@@ -155,6 +155,11 @@ test("failover template uses the Sub2API native error_code schema", async () => 
   expect(codexTemplate).toContain("errorCode: 502");
   expect(codexTemplate).toContain("Upstream HTTP/2 stream failed");
   expect(codexTemplate).toContain("errorCode: 524");
+  const laneLockRule = parsed.operations.upstreamManagement.failoverRules.find(
+    (rule) => rule.error_code === 429 && rule.keywords.includes("Free usage limit reached"),
+  );
+  expect(laneLockRule?.keywords).toContain("our free model is holding this lane shut locally");
+  expect(laneLockRule?.duration_minutes).toBe(30);
   expect(badResponseRule?.duration_minutes).toBe(3);
   expect(openAIErrorRules.map((rule) => rule.error_code)).toEqual([400]);
   expect(parsed.operations.upstreamManagement.failoverRules

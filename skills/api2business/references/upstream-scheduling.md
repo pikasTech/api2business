@@ -415,6 +415,11 @@
   - 作用域可显式声明 `idleProbeCandidateLimit: 1..1000`，覆盖全局候选上限。
     - 需要每轮完整覆盖的独立账号实验必须令该值不小于作用域内可调度账号数。
     - 回执中的 `candidateLimit` 与实际查询参数必须相同，不能用全局默认值冒充作用域配置。
+    - `opencode-free` 使用共享出口，自动探活固定
+      `idleProbeCandidateLimit: 1` 且 `idleProbeIntervalSeconds >= 3600`。
+      TypeScript 配置校验和 Go worker 都必须拒绝更小值，防止整池在 180 秒周期内同时撞锁。
+      手动全量探活仍通过 `accounts idle-probe run --accounts <完整ID集合>` 显式执行，
+      不删除或截断显式账号集合。
   - `in-flight` 跳过是轮次并发保护，不是探活业务失败；回执必须带同一作用域的
     `runningSince`、`runningForMs` 和续查提示，让调用方知道在等待哪一轮，而不是只看到 skip。
     轮次只有在计划中的未就绪账号不被
@@ -678,6 +683,18 @@
   - 获准恢复时先使用合适的低优先级，并回读状态、优先级及后续实际流量。
   - 无新增样本、无新增错误、低优先级恢复和已验证健康必须分别表述。
   - 有界观察结束后停止本轮监控；遗留风险和人工固定项在交付中明确说明，不暗示仍有后台值守。
+
+### OpenCode Free 共享出口 lane 锁
+
+- `opencode-free` 的 17 个单账号上游共用 `direct` 出口。
+  - 上游 `429` 正文出现 `our free model is holding this lane shut locally` 或
+    `Free usage limit reached` 时，归因 `lane_locked`，不能归因单账号故障。
+  - 错误投影保留 `failureScope=shared-outlet`、`accountScoped=false` 和
+    `accountSwitchCanBypass=false`；切号不能绕过同一个出口锁。
+  - 正文可解析时保留 ISO `recordedAt` 和 `liftsAt`；缺少时区或时间时返回 `null`，
+    不用请求时间猜测锁窗口。
+  - 锁未解除前只等待 `liftsAt`、停止自动探活或更换出口，不并发轮询整池账号。
+  - `errors diagnose` 的稳定短语和最终签名使用 `lane_locked`，人类输出单独显示共享出口证据。
 
 ## 评分、容量与冷却联动评估
 

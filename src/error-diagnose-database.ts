@@ -1,4 +1,5 @@
 import type { AppConfig } from "./config";
+import { detectLaneLock } from "./lane-lock";
 import type {
   Sub2ApiReadClient,
   Sub2ApiReadPriority,
@@ -127,6 +128,11 @@ classified AS (
     COALESCE(log_evidence.failover_event, false) AS failover_event,
     COALESCE(log_evidence.failover_aborted, false) AS failover_aborted,
     CASE
+      WHEN message_text LIKE '%our free model is holding this lane shut locally%'
+        OR (
+          message_text LIKE '%free usage limit reached%'
+          AND (COALESCE(e.upstream_status_code, e.status_code) = 429 OR message_text LIKE '%opencode%')
+        ) THEN 'lane_locked'
       WHEN COALESCE(e.upstream_status_code, e.status_code) = 429 THEN 'rate_limited'
       WHEN COALESCE(e.upstream_status_code, e.status_code) = 502 THEN 'upstream_502'
       WHEN COALESCE(e.upstream_status_code, e.status_code) = 503 THEN 'upstream_503'
@@ -160,6 +166,11 @@ classified AS (
       COALESCE(e.error_type, 'unknown'),
       COALESCE(e.provider_error_code, e.provider_error_type, '-'),
       CASE
+        WHEN message_text LIKE '%our free model is holding this lane shut locally%'
+          OR (
+            message_text LIKE '%free usage limit reached%'
+            AND (COALESCE(e.upstream_status_code, e.status_code) = 429 OR message_text LIKE '%opencode%')
+          ) THEN 'lane_locked'
         WHEN COALESCE(e.upstream_status_code, e.status_code) = 429 THEN 'rate_limited'
         WHEN COALESCE(e.upstream_status_code, e.status_code) = 502 THEN 'upstream_502'
         WHEN COALESCE(e.upstream_status_code, e.status_code) = 503 THEN 'upstream_503'
@@ -416,7 +427,25 @@ export function projectErrorDiagnoseRow(row: Row): Row {
     failoverAbortedRequests: integer(row.failover_aborted_requests),
   };
   const signatures = Array.isArray(row.signatures) ? row.signatures : [];
-  const chains = Array.isArray(row.chains) ? row.chains : [];
+  const chains = Array.isArray(row.chains) ? row.chains.map((value) => {
+    if (typeof value !== "object" || value === null) return value;
+    const chain = value as Row;
+    const attempts = Array.isArray(chain.attempts) ? chain.attempts.map((attemptValue) => {
+      if (typeof attemptValue !== "object" || attemptValue === null) return attemptValue;
+      const attempt = attemptValue as Row;
+      const laneLock = detectLaneLock({
+        statusCode: Number(attempt.statusCode ?? attempt.upstreamStatusCode ?? attempt.recordedStatusCode),
+        messageText: [
+          attempt.errorMessage,
+          attempt.errorBody,
+          attempt.upstreamErrorMessage,
+          attempt.upstreamErrorDetail,
+        ].map((raw) => String(raw ?? "")).join(" "),
+      });
+      return { ...attempt, laneLock };
+    }) : chain.attempts;
+    return { ...chain, attempts };
+  }) : [];
   const routingMatrix = Array.isArray(row.routing_matrix) ? row.routing_matrix : [];
   return {
     summary,

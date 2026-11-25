@@ -19,6 +19,8 @@ test("error detail queries are bounded and request scoped", () => {
   expect(errorGetQuery).toContain("'gatewayTimeout'");
   expect(errorGetQuery).toContain("'streamInterrupted'");
   expect(errorGetQuery).toContain("'insufficientCredits'");
+  expect(errorGetQuery).toContain("'laneLocked'");
+  expect(errorGetQuery).toContain("our free model is holding this lane shut locally");
   expect(errorListQuery).not.toContain("SET TRANSACTION READ ONLY");
 });
 
@@ -66,6 +68,30 @@ test("error category follows Sub2API native phase and type mapping", () => {
   }, "Asia/Shanghai");
   expect(row.category).toBe("quota");
   expect(row.customerVisible).toBeTrue();
+});
+
+test("OpenCode Free lane lock is projected as a shared-outlet failure", () => {
+  const row = projectErrorDetailRow({
+    id: 7,
+    status_code: 429,
+    display_status_code: 429,
+    upstream_status_code: 429,
+    error_phase: "upstream",
+    error_type: "upstream_error",
+    category: "rate_limit",
+    upstream_error_detail: "Free usage limit reached. recorded at 2026-11-25T09:30:00Z; lifts at 2026-11-25T10:00:00Z",
+  }, "Asia/Shanghai");
+
+  expect(row.category).toBe("lane_locked");
+  expect(row.stablePhrases).toMatchObject({ laneLocked: true });
+  expect(row.laneLock).toMatchObject({
+    classification: "lane_locked",
+    failureScope: "shared-outlet",
+    accountScoped: false,
+    accountSwitchCanBypass: false,
+    recordedAt: "2026-11-25T09:30:00.000Z",
+    liftsAt: "2026-11-25T10:00:00.000Z",
+  });
 });
 
 test("native error list keeps business-limited rows visible", () => {

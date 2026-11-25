@@ -31,6 +31,20 @@ function rows(value: unknown): Row[] {
     : [];
 }
 
+function laneLockSummary(value: unknown): string | null {
+  if (typeof value !== "object" || value === null) return null;
+  const evidence = value as Row;
+  if (evidence.classification !== "lane_locked") return null;
+  return [
+    "lane_locked",
+    `outlet=${String(evidence.failureScope ?? "unknown")}`,
+    `accountScoped=${String(evidence.accountScoped ?? "unknown")}`,
+    `switchCanBypass=${String(evidence.accountSwitchCanBypass ?? "unknown")}`,
+    `recordedAt=${String(evidence.recordedAt ?? "unknown")}`,
+    `liftsAt=${String(evidence.liftsAt ?? "unknown")}`,
+  ].join(" ");
+}
+
 function classifyChain(chain: Row): Row {
   const rawAttempts = rows(chain.attempts);
   // 只采用系统事件，不把供应商正文中的同名短语当成网关判定。
@@ -178,6 +192,12 @@ export function emitErrorDiagnosis(value: Row, json: boolean): void {
       String((row.diagnosis as Row | undefined)?.classification ?? "-"),
     ].join("  "));
   }
+  const laneLocks = chains.flatMap((chain) => rows(chain.attempts).map((attempt) => laneLockSummary(attempt.laneLock)))
+    .filter((value): value is string => value !== null);
+  if (laneLocks.length > 0) {
+    console.log("\nSHARED OUTLET LANE LOCK");
+    for (const laneLock of [...new Set(laneLocks)]) console.log(laneLock);
+  }
 }
 
 export function emitErrorInspection(value: Row, json: boolean): void {
@@ -203,6 +223,10 @@ export function emitErrorInspection(value: Row, json: boolean): void {
       String(attempt.upstreamStatusCode ?? "-").padStart(8),
       evidence?.available === true ? `${String(evidence.source)}:${String(evidence.summary)}` : "unavailable",
     ].join("  "));
+  }
+  for (const attempt of attempts) {
+    const summary = laneLockSummary(attempt.laneLock);
+    if (summary) console.log(summary);
   }
 }
 

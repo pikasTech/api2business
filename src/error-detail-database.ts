@@ -1,4 +1,5 @@
 import type { AppConfig } from "./config";
+import { detectLaneLock } from "./lane-lock";
 import { terminalPolicyExistsSql, usageRequestMatchesSql } from "./request-terminal-policy";
 import type {
   Sub2ApiReadClient,
@@ -55,6 +56,14 @@ JSONB_BUILD_OBJECT(
   'unexpectedEof', LOWER(message_text) LIKE '%unexpected eof%',
   'streamInterrupted', LOWER(message_text) LIKE '%upstream response stream was interrupted%',
   'originIncompleteResponse', LOWER(message_text) LIKE '%origin web server returned an invalid or incomplete response%',
+  'laneLocked', LOWER(message_text) LIKE '%our free model is holding this lane shut locally%'
+    OR (
+      LOWER(message_text) LIKE '%free usage limit reached%'
+      AND (
+        COALESCE(upstream_status_code, status_code) = 429
+        OR LOWER(message_text) LIKE '%opencode%'
+      )
+    ),
   'errorCode502', LOWER(message_text) LIKE '%error code: 502%',
   'errorCode504', LOWER(message_text) LIKE '%error code: 504%',
   'statusCode502', LOWER(message_text) LIKE '%status code: 502%',
@@ -276,6 +285,22 @@ function timestamp(value: unknown, timezone: string): string | null {
 }
 
 export function projectErrorDetailRow(row: Row, timezone: string): Row {
+  const laneLock = detectLaneLock({
+    statusCode: integer(row.display_status_code),
+    messageText: [
+      row.error_message,
+      row.error_body,
+      row.upstream_error_message,
+      row.upstream_error_detail,
+      row.system_log_text,
+    ].map((value) => String(value ?? "")).join(" "),
+  });
+  const stablePhrases = {
+    ...(typeof row.stable_phrases === "object" && row.stable_phrases !== null
+      ? row.stable_phrases as Row
+      : {}),
+    ...(laneLock ? { laneLocked: true } : {}),
+  };
   return {
     recordId: String(row.id ?? ""),
     requestId: row.request_id ?? null,
@@ -303,7 +328,7 @@ export function projectErrorDetailRow(row: Row, timezone: string): Row {
     providerErrorCode: row.provider_error_code ?? null,
     providerErrorType: row.provider_error_type ?? null,
     businessLimited: row.is_business_limited === true,
-    category: row.category ?? "other",
+    category: laneLock ? "lane_locked" : row.category ?? "other",
     recovered: row.recovered === true,
     failoverObserved: row.failover_observed === true,
     probe: row.probe === true,
@@ -313,7 +338,8 @@ export function projectErrorDetailRow(row: Row, timezone: string): Row {
         (integer(row.upstream_status_code) ?? 0) >= 400 ||
         String(row.error_type ?? "").toLowerCase() === "cyber_policy"
       ),
-    stablePhrases: row.stable_phrases ?? {},
+    stablePhrases,
+    laneLock,
     responseEvidence: projectResponseEvidence(row),
     createdAt: timestamp(row.created_at, timezone),
   };
