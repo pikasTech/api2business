@@ -384,6 +384,7 @@ function help(): Record<string, unknown> {
       "accounts lifecycle retire status --id <plan-id> --over-api <absolute-http(s)-URL>",
       "accounts lifecycle retire confirm --id <plan-id> --confirm --over-api <absolute-http(s)-URL>",
       "upstreams list [--page N --search <text>] --over-api <absolute-http(s)-URL>",
+      "upstreams capacity --scope <configured-scope> [--capacity <owning-YAML-value>] [--confirm] --over-api <absolute-http(s)-URL>",
       "upstreams usage [--accounts <id-or-range,...>] --over-api <absolute-http(s)-URL>",
       "upstreams models sync --accounts <id-or-range,...> [--confirm] --over-api <absolute-http(s)-URL>",
       "upstreams model-alias --id <account-id> --model <alias> --upstream-model <upstream-model> [--confirm] --over-api <absolute-http(s)-URL>",
@@ -957,6 +958,28 @@ async function remote(parsed: Parsed, config: ReturnType<typeof loadConfig>, tar
     throw new Error("bugteam purchase-import requires options, create, or status");
   }
   if (group === "upstreams" && action === "list") return await client.upstreams(parsed.page ?? 1, parsed.search);
+  if (group === "upstreams" && action === "capacity") {
+    if (!parsed.scope) throw new Error("upstreams capacity requires --scope <configured-scope>");
+    const scope = config.operations.upstreamSchedulingV2?.scopes[parsed.scope];
+    if (!scope || scope.enabled !== true) throw new Error(`scheduling scope ${parsed.scope} is not enabled`);
+    if (scope.accountCapacity === undefined) {
+      throw new Error(`operations.upstreamSchedulingV2.scopes.${parsed.scope}.accountCapacity is required`);
+    }
+    if (parsed.capacity !== null && parsed.capacity !== scope.accountCapacity) {
+      throw new Error(`--capacity must match owning YAML value ${scope.accountCapacity}`);
+    }
+    if (!parsed.confirm) return {
+      ok: true,
+      mutation: false,
+      action: "upstream-scope-capacity",
+      scope: parsed.scope,
+      platform: scope.platform,
+      groupIds: scope.eligibleGroupIds,
+      capacity: scope.accountCapacity,
+      hint: "add --confirm to update every account in this scope and verify readback",
+    };
+    return await client.upstreamScopeCapacity(parsed.scope, scope.accountCapacity);
+  }
   if (group === "upstreams" && action === "usage") {
     const accountIds = parsed.accounts ? parseAccountIdSelector(parsed.accounts) : [];
     return await client.upstreamUsage(accountIds, `upstream-usage-${crypto.randomUUID()}`);
@@ -1687,6 +1710,13 @@ export async function runCli(args: string[]): Promise<void> {
         behavior: "预览不写入；确认后异步补齐同平台切号模板、私有探活及 Codex 强制 Responses，并执行一次手动探活。",
         verification: "用 upstreams status --id <workflow-id> 和同一绝对 URL 查询终态；配置与请求分别核验，partial 不代表全部完成。",
         retry: "重试使用原账号 ID，无需供应商密钥；不会重建账号或并入默认业务分组。",
+      }, wantsJson);
+    }
+    if (args.includes("--help") && args.some((item, index) => item === "upstreams" && args[index + 1] === "capacity")) {
+      return emit({ ok: true, command: "upstreams capacity",
+        usage: "bun skills/api2business/scripts/api2business-cli.ts --config <owning-YAML> upstreams capacity --scope <configured-scope> [--capacity <owning-YAML-value>] [--confirm] --over-api <absolute-http(s)-URL> [--json]",
+        behavior: "默认预览；--confirm 读取该作用域全部分组成员，批量写入 owning YAML 的 accountCapacity，并逐账号回读。",
+        boundary: "该命令只设置每个账号的原生 concurrency，不创建分组级全局并发门，也不修改其他作用域。",
       }, wantsJson);
     }
     if (args.includes("--help") && args.includes("native")) return emit(nativeHelp(args[args.indexOf("native") + 1]), wantsJson);

@@ -1709,6 +1709,80 @@ export class UpstreamManagementService {
     };
   }
 
+  async updateScopeCapacity(scopeName: string, requestedCapacity?: unknown): Promise<Record<string, unknown>> {
+    const scope = this.config.operations.upstreamSchedulingV2?.scopes[scopeName];
+    if (!scope || scope.enabled !== true) throw new Error(`scheduling scope ${scopeName} is not enabled`);
+    const capacity = scope.accountCapacity;
+    if (capacity === undefined) throw new Error(`operations.upstreamSchedulingV2.scopes.${scopeName}.accountCapacity is required`);
+    if (requestedCapacity !== undefined && validateCapacity(requestedCapacity) !== capacity) {
+      throw new Error(`requested capacity must match operations.upstreamSchedulingV2.scopes.${scopeName}.accountCapacity=${capacity}`);
+    }
+    if (!this.runtime) throw new Error("Api2Business Sub2API runtime mutation service 不可用");
+
+    const query = async (cacheMode: "bypass-cache") => await this.reads.query<{
+      id: number;
+      name: string;
+      platform: string;
+      concurrency: number;
+      status: string;
+      schedulable: boolean;
+    }>({
+      key: `upstreams.scope-capacity.${scopeName}.${Date.now()}`,
+      kind: "upstreams.scope-capacity",
+      priority: "manual",
+      cacheMode,
+      sql: `SELECT a.id, a.name, LOWER(a.platform) AS platform, a.concurrency, a.status,
+          COALESCE(a.schedulable, false) AS schedulable
+        FROM accounts a
+        JOIN account_groups ag ON ag.account_id = a.id
+        WHERE ag.group_id = ANY(string_to_array($1::text, ',')::bigint[])
+          AND a.deleted_at IS NULL
+          AND LOWER(a.platform) = $2::text
+        ORDER BY a.id`,
+      parameters: [scope.eligibleGroupIds.join(","), scope.platform],
+    });
+
+    const before = await query("bypass-cache");
+    if (before.rows.length === 0) {
+      throw new Error(`scheduling scope ${scopeName} has no accounts in groups ${scope.eligibleGroupIds.join(",")}`);
+    }
+    const accountIds = before.rows.map((row) => positiveInteger(row.id)).filter((id): id is number => id !== null);
+    if (accountIds.length !== before.rows.length || new Set(accountIds).size !== accountIds.length) {
+      throw new Error(`scheduling scope ${scopeName} returned invalid or duplicate account IDs`);
+    }
+    const mutation = await this.runtime.setAccountConcurrency(
+      accountIds,
+      capacity,
+      this.config.operations.upstreamManagement.mutationTimeoutMs,
+    );
+
+    const after = await query("bypass-cache");
+    const afterIds = after.rows.map((row) => positiveInteger(row.id)).filter((id): id is number => id !== null);
+    if (afterIds.join(",") !== accountIds.join(",")) {
+      throw new Error(`scheduling scope ${scopeName} account membership changed during capacity update`);
+    }
+    const mismatched = after.rows.filter((row) => Number(row.concurrency) !== capacity);
+    if (mismatched.length > 0) {
+      throw new Error(`scheduling scope ${scopeName} capacity readback mismatch for accounts ${mismatched.map((row) => row.id).join(",")}`);
+    }
+
+    return {
+      ok: true,
+      action: "upstream-scope-capacity",
+      mutation: true,
+      scope: scopeName,
+      platform: scope.platform,
+      groupIds: scope.eligibleGroupIds,
+      capacity,
+      accountCount: accountIds.length,
+      changedCount: before.rows.filter((row) => Number(row.concurrency) !== capacity).length,
+      accountIds,
+      mutationResult: mutation,
+      verifiedCount: after.rows.length,
+      valuesPrinted: false,
+    };
+  }
+
   async update(id: number, input: {
     baseUrl?: unknown;
     suffix?: unknown;

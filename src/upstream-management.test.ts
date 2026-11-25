@@ -72,6 +72,49 @@ test("upstream creation bootstrap rate is YAML-owned", () => {
   expect(config.operations.upstreamManagement.unprobedFallbackRateCnyPerApiUsd).toBe(0.1);
 });
 
+test("scope capacity update applies every member and verifies native readback", async () => {
+  const config = loadConfig("config/api2business.example.yaml");
+  let queryCount = 0;
+  const queries: Array<Record<string, unknown>> = [];
+  const reads = {
+    query: async (input: Record<string, unknown>) => {
+      queries.push(input);
+      queryCount += 1;
+      return { rows: queryCount === 1
+        ? [
+          { id: 1627, name: "free-a", platform: "openai", concurrency: 8, status: "active", schedulable: true },
+          { id: 1628, name: "free-b", platform: "openai", concurrency: 1, status: "active", schedulable: true },
+        ]
+        : [
+          { id: 1627, name: "free-a", platform: "openai", concurrency: 1, status: "active", schedulable: true },
+          { id: 1628, name: "free-b", platform: "openai", concurrency: 1, status: "active", schedulable: true },
+        ] };
+    },
+  } as unknown as Sub2ApiReadClient;
+  const calls: Array<{ accountIds: number[]; concurrency: number; timeoutMs?: number }> = [];
+  const runtime = {
+    setAccountConcurrency: async (accountIds: number[], concurrency: number, timeoutMs?: number) => {
+      calls.push({ accountIds, concurrency, timeoutMs });
+      return { configured: accountIds.length };
+    },
+  } as never;
+  const service = new UpstreamManagementService(config, reads, null, runtime);
+
+  const result = await service.updateScopeCapacity("opencode-free");
+
+  expect(calls).toEqual([{ accountIds: [1627, 1628], concurrency: 1, timeoutMs: 120000 }]);
+  expect(result).toMatchObject({
+    ok: true,
+    scope: "opencode-free",
+    capacity: 1,
+    accountCount: 2,
+    changedCount: 1,
+    verifiedCount: 2,
+  });
+  expect(queries).toHaveLength(2);
+  expect(queries[0]?.parameters).toEqual(["697", "openai"]);
+});
+
 test("quota monitor excludes wallets from owning YAML", () => {
   const config = loadConfig("config/api2business.example.yaml");
   expect(config.operations.upstreamManagement.quotaMonitor.excludedWalletKeys).toContain("https://sub.api2business.com");

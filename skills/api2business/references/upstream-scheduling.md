@@ -366,6 +366,10 @@
   - OpenCode Free 实验作用域要求一个上游账号唯一对应一个 Sub2API 账号。
     - 不得把聚合多个上游的私有池账号加入该作用域。
     - 单账号限流后由 Sub2API 在同一作用域的其余单账号中切换。
+    - `opencode-free.accountCapacity` 必须为 1；使用
+      `upstreams capacity --scope opencode-free --confirm --over-api <absolute-http(s)-URL>`
+      读取该作用域全部分组成员，一次批量写入每个账号的原生 `concurrency=1`，再逐账号回读。
+    - 该容量是账号级并发，不是分组级全局并发；增删成员后重跑同一命令即可收敛。
   - 探活候选计划必须使用一次集合聚合查询，再按账号回补私有探活分组的用量和错误；
     禁止恢复逐账号 `LATERAL` 或相关子查询。该查询属于自动读队列，必须在读代理语句
     超时前完成，不能让一个大作用域长期产生 `planned=0` 的失败轮次。
@@ -687,6 +691,8 @@
 ### OpenCode Free 共享出口 lane 锁
 
 - `opencode-free` 的 17 个单账号上游共用 `direct` 出口。
+  - 每个账号的原生并发容量固定为 1；共享出口仍可能被其他请求占用，不能把账号并发 1
+    解释为上游 lane 的全局单并发。
   - 上游 `429` 正文出现 `our free model is holding this lane shut locally` 或
     `Free usage limit reached` 时，归因 `lane_locked`，不能归因单账号故障。
   - 错误投影保留 `failureScope=shared-outlet`、`accountScoped=false` 和

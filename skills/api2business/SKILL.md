@@ -222,6 +222,9 @@ bun skills/api2business/scripts/api2business-cli.ts --config config/api2business
   `opencode-free` 共享出口固定每轮最多 1 个候选且周期不少于 3600 秒；lane 锁、时间证据和
   手动全量探活边界见
   [OpenCode Free 共享出口 lane 锁](references/upstream-scheduling.md#opencode-free-共享出口-lane-锁)。
+  `opencode-free.accountCapacity` 固定为 1；使用
+  `upstreams capacity --scope opencode-free --confirm --over-api <absolute-http(s)-URL>`
+  批量设置全部分组成员并逐账号回读。该值是每个账号的并发上限，不是分组级全局并发。
 - 充值候选使用 `upstreams recharge-candidates --over-api <absolute-http(s)-URL>`。
 - 历史钱包回填使用 `upstreams usage-cache restore`，必须以 `--since <ISO时间>` 提供原观测时刻。
   - `upstreams usage-cache restore --help` 提供独立参数帮助，无需读取配置或连接运行面。
