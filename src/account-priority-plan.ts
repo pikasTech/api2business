@@ -38,16 +38,14 @@ type LatencyNormalization = {
   maximumTtftP95Ms: number | null;
 };
 
-type PriorityProfile = "codex" | "claude" | "grok" | "deepseek" | "opencode" | "gemini";
-
-function latencyBounds(config: AppConfig, profile: PriorityProfile): {
+function latencyBounds(config: AppConfig, policy: PriorityPlanPolicy): {
   minimumTtftP95Ms: number;
   maximumTtftP95Ms: number;
 } {
-  const scorePolicy = profile === "grok" ? config.sub2api.grokScorePolicy
-    : profile === "deepseek" ? (config.sub2api.deepseekScorePolicy ?? config.sub2api.scorePolicy)
-      : profile === "opencode" ? (config.sub2api.opencodeScorePolicy ?? config.sub2api.poolScorePolicy ?? config.sub2api.scorePolicy)
-        : profile === "gemini" ? (config.sub2api.geminiScorePolicy ?? config.sub2api.scorePolicy)
+  const scorePolicy = policy.platform === "grok" ? config.sub2api.grokScorePolicy
+    : policy.platform === "deepseek" ? (config.sub2api.deepseekScorePolicy ?? config.sub2api.scorePolicy)
+      : policy.platform === "opencode_go" ? (config.sub2api.opencodeScorePolicy ?? config.sub2api.poolScorePolicy ?? config.sub2api.scorePolicy)
+        : policy.platform === "gemini" ? (config.sub2api.geminiScorePolicy ?? config.sub2api.scorePolicy)
       : config.sub2api.scorePolicy;
   return {
     minimumTtftP95Ms: scorePolicy.ttftFullScoreMs,
@@ -168,7 +166,7 @@ function isZeroSample(row: ScoreRow): boolean {
 }
 
 function priorityChange(
-  profile: PriorityProfile,
+  profile: string,
   row: ScoreRow,
   desired: number,
   priorityMode: string,
@@ -299,7 +297,7 @@ function buildStableRankPriorities(
 function buildPriorityProfile(
   ranking: Record<string, unknown>,
   config: AppConfig,
-  profile: PriorityProfile,
+  profile: string,
   policy: PriorityPlanPolicy,
 ): Record<string, unknown> {
   if (policy.maximumPriority < policy.minimumPriority) {
@@ -478,7 +476,7 @@ function buildPriorityProfile(
     .map((row) => number(row.ttftP95Ms))
     .filter((value): value is number => value !== null && value >= 0);
   const latencyEvidence = trustedLatencies.length > 0 ? trustedLatencies : fallbackLatencies;
-  const configuredLatencyBounds = latencyBounds(config, profile);
+  const configuredLatencyBounds = latencyBounds(config, policy);
   const latencyNormalization: LatencyNormalization = latencyEvidence.length === 0
     ? {
         strategy: "linear-penalty",
@@ -707,6 +705,17 @@ function buildPriorityProfile(
   };
 }
 
+const builtInPriorityProfiles = new Set(["codex", "claude", "grok", "deepseek", "opencode", "gemini"]);
+
+function basePriorityPolicy(config: AppConfig, platform: string): PriorityPlanPolicy {
+  if (platform === "anthropic") return config.sub2api.claudePriorityPlan;
+  if (platform === "grok") return config.sub2api.grokPriorityPlan;
+  if (platform === "deepseek") return config.sub2api.deepseekPriorityPlan;
+  if (platform === "opencode_go") return config.sub2api.opencodePriorityPlan ?? config.sub2api.priorityPlan;
+  if (platform === "gemini") return config.sub2api.geminiPriorityPlan ?? config.sub2api.priorityPlan;
+  return config.sub2api.priorityPlan;
+}
+
 export function buildAccountPriorityPlan(
   ranking: Record<string, unknown>,
   config: AppConfig,
@@ -750,6 +759,19 @@ export function buildAccountPriorityPlan(
     changes: [],
     readOnly: true,
   };
+  const customProfiles: Record<string, Record<string, unknown>> = {};
+  const customPolicies: Record<string, PriorityPlanPolicy> = {};
+  for (const [name, scope] of Object.entries(config.operations.upstreamSchedulingV2?.scopes ?? {})) {
+    if (!scope.enabled || builtInPriorityProfiles.has(name)
+      || (!scope.features.planRead && !scope.features.priorityAutomation)) continue;
+    const policy = {
+      ...(scope.priorityPlan ?? basePriorityPolicy(config, scope.platform)),
+      platform: scope.platform,
+      eligibleGroupIds: [...scope.eligibleGroupIds],
+    };
+    customPolicies[name] = policy;
+    customProfiles[name] = buildPriorityProfile(ranking, config, name, policy);
+  }
   const priorities = {
     ...(codex.priorities as Record<string, number>),
     ...(claudeReadOnly.priorities as Record<string, number>),
@@ -757,6 +779,8 @@ export function buildAccountPriorityPlan(
     ...(deepseek.priorities as Record<string, number>),
     ...(opencode.priorities as Record<string, number>),
     ...(gemini.priorities as Record<string, number>),
+    ...Object.fromEntries(Object.values(customProfiles).flatMap((profile) =>
+      Object.entries(profile.priorities as Record<string, number>))),
   };
   const changes = [
     ...(codex.changes as Array<Record<string, unknown>>),
@@ -765,10 +789,20 @@ export function buildAccountPriorityPlan(
     ...(deepseek.changes as Array<Record<string, unknown>>),
     ...(opencode.changes as Array<Record<string, unknown>>),
     ...(gemini.changes as Array<Record<string, unknown>>),
+    ...Object.values(customProfiles).flatMap((profile) => profile.changes as Array<Record<string, unknown>>),
   ];
+  const customProfileSummaries = Object.fromEntries(Object.entries(customProfiles).map(([name, profile]) => [name, {
+    eligibleCount: profile.eligibleCount,
+    fixedCount: profile.fixedCount,
+    changedCount: profile.changedCount,
+    anchorScore: profile.anchorScore,
+    observedAnchorScore: profile.observedAnchorScore,
+    priorityReferenceScore: profile.priorityReferenceScore,
+    costRange: profile.costRange,
+  }]));
   return {
     ...codex,
-    policy: { codex: config.sub2api.priorityPlan, claude: claudePolicy, grok: config.sub2api.grokPriorityPlan, ...(config.sub2api.deepseekPriorityPlan ? { deepseek: config.sub2api.deepseekPriorityPlan } : {}), ...(config.sub2api.opencodePriorityPlan ? { opencode: config.sub2api.opencodePriorityPlan } : {}), ...(config.sub2api.geminiPriorityPlan ? { gemini: config.sub2api.geminiPriorityPlan } : {}) },
+    policy: { codex: config.sub2api.priorityPlan, claude: claudePolicy, grok: config.sub2api.grokPriorityPlan, ...(config.sub2api.deepseekPriorityPlan ? { deepseek: config.sub2api.deepseekPriorityPlan } : {}), ...(config.sub2api.opencodePriorityPlan ? { opencode: config.sub2api.opencodePriorityPlan } : {}), ...(config.sub2api.geminiPriorityPlan ? { gemini: config.sub2api.geminiPriorityPlan } : {}), ...customPolicies },
     profiles: {
       codex: {
         eligibleCount: codex.eligibleCount,
@@ -825,8 +859,10 @@ export function buildAccountPriorityPlan(
         priorityReferenceScore: gemini.priorityReferenceScore,
         costRange: gemini.costRange,
       },
+      ...customProfileSummaries,
     },
-    eligibleCount: Number(codex.eligibleCount) + Number(claudeReadOnly.eligibleCount) + Number(grok.eligibleCount) + Number(deepseek.eligibleCount) + Number(opencode.eligibleCount) + Number(gemini.eligibleCount),
+    eligibleCount: Number(codex.eligibleCount) + Number(claudeReadOnly.eligibleCount) + Number(grok.eligibleCount) + Number(deepseek.eligibleCount) + Number(opencode.eligibleCount) + Number(gemini.eligibleCount)
+      + Object.values(customProfiles).reduce((sum, profile) => sum + Number(profile.eligibleCount ?? 0), 0),
     changedCount: Object.keys(priorities).length,
     priorities,
     changes,

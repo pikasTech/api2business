@@ -114,7 +114,13 @@ describe("upstream scheduling v2 platform validation", () => {
     const config = loadConfig(join(configDir, "api2business.example.yaml"));
     expect(config.operations.upstreamSchedulingV2?.scopes["opencode-free"]).toMatchObject({
       enabled: true, platform: "openai", eligibleGroupIds: [697],
-      idleProbeCacheMode: "full", idleProbeModels: ["deepseek-v4.1-flash"],
+      priorityPlan: {
+        platform: "openai", eligibleGroupIds: [697],
+        evidenceTargetAttempts: 50, evidenceTargetFirstTokenSamples: 20,
+        minimumPriority: 100, maximumPriority: 300,
+      },
+      idleProbeCacheMode: "full", idleProbeCandidateLimit: 20,
+      idleProbeModels: ["deepseek-v4.1-flash"],
       features: { idleProbe: true, priorityAutomation: true, modelSyncAutomation: false },
     });
     expect(config.operations.upstreamSchedulingV2?.scopes.codex.idleProbeModels).toBeUndefined();
@@ -123,6 +129,14 @@ describe("upstream scheduling v2 platform validation", () => {
         raw.operations.upstreamSchedulingV2.scopes["opencode-free"].idleProbeModels = invalid;
       })).toThrow("idleProbeModels must contain unique model IDs");
     }
+    expect(() => loadExampleWithMutation((raw) => {
+      const policy = raw.operations.upstreamSchedulingV2.scopes["opencode-free"].priorityPlan as Record<string, unknown>;
+      policy.platform = "grok";
+    })).toThrow("operations.upstreamSchedulingV2.scopes.opencode-free.priorityPlan.platform must match");
+    expect(() => loadExampleWithMutation((raw) => {
+      const policy = raw.operations.upstreamSchedulingV2.scopes["opencode-free"].priorityPlan as Record<string, unknown>;
+      policy.eligibleGroupIds = [2];
+    })).toThrow("operations.upstreamSchedulingV2.scopes.opencode-free.priorityPlan.eligibleGroupIds must match");
   });
 });
 

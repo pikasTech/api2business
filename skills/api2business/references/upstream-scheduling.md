@@ -356,6 +356,16 @@
   - V2 工作流按作用域独立运行。每个作用域的
     `scoreRead`、`planRead`、`planWrite`、`priorityAutomation`、`idleProbe` 和
     `upstreamWrite` 都只从 owning YAML 读取，代码不得替代开关。
+  - 自定义作用域必须生成同名优先级 profile。
+    - profile 的 `platform` 和 `eligibleGroupIds` 只取该作用域，不能复用同名平台的内置 profile。
+    - 自动写入、历史记录和手工计划都只处理该 profile 的候选账号。
+    - 平台评分边界从对应平台的 `scorePolicy` 读取。
+    - scope 声明的 `priorityPlan` 是该作用域的唯一优先级策略来源；其 `platform` 和
+      `eligibleGroupIds` 必须与 scope 完全一致。
+    - 只有 scope 未声明 `priorityPlan` 时才兼容回退到平台基础策略，避免现存作用域被隐式改参。
+  - OpenCode Free 实验作用域要求一个上游账号唯一对应一个 Sub2API 账号。
+    - 不得把聚合多个上游的私有池账号加入该作用域。
+    - 单账号限流后由 Sub2API 在同一作用域的其余单账号中切换。
   - 探活候选计划必须使用一次集合聚合查询，再按账号回补私有探活分组的用量和错误；
     禁止恢复逐账号 `LATERAL` 或相关子查询。该查询属于自动读队列，必须在读代理语句
     超时前完成，不能让一个大作用域长期产生 `planned=0` 的失败轮次。
@@ -402,6 +412,9 @@
   - 作用域可显式声明 `idleProbeCacheMode: full|compact`，覆盖该作用域的账号/平台缓存启发式；
     未声明时才由账号与平台缓存证据选择。声明为 `full` 的作用域不得在任何轮次退回 `compact`，
     计划、轮次记录和 `requestEvidence` 都必须显示实际 `cacheMode`。
+  - 作用域可显式声明 `idleProbeCandidateLimit: 1..1000`，覆盖全局候选上限。
+    - 需要每轮完整覆盖的独立账号实验必须令该值不小于作用域内可调度账号数。
+    - 回执中的 `candidateLimit` 与实际查询参数必须相同，不能用全局默认值冒充作用域配置。
   - `in-flight` 跳过是轮次并发保护，不是探活业务失败；回执必须带同一作用域的
     `runningSince`、`runningForMs` 和续查提示，让调用方知道在等待哪一轮，而不是只看到 skip。
     轮次只有在计划中的未就绪账号不被
@@ -782,6 +795,9 @@
 - V2 自动优先级必须把当前作用域的 `platform` 和 `eligibleGroupIds` 下推到评分 SQL。
   - 分组参数使用逗号分隔的 ID CSV，在 SQL 内转换为 `bigint[]`；不要把数组直接作为文本参数。
   - 不得先查询全部平台、再在 JavaScript 中过滤；该做法只会白白扩大大作用域的扫描和内存开销。
+- 自定义作用域不得落入空的计划结果。
+  - 同名 profile 必须包含该作用域内的账号变更和候选统计。
+  - 自动轮次只能持久化当前作用域的 profile，不能把其他平台或内置作用域一并写入。
 - 自动优先级每个终态都要留下可归因证据：查询耗时、查询起止时间、评分快照时间、阻断原因和恢复动作。
   - 查询异常必须写入 failed plan，并保留有界 `scoreError`；不能只返回通用失败。
   - `priority history` 的 `automation_blocked_reasons`、`score_query_duration_ms`、

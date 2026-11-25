@@ -406,6 +406,9 @@ describe("upstream scheduling v2", () => {
       groupIds: [697],
     });
     expect(snapshot.data.poolQuality.platform).not.toBe("codex");
+    const plan = await service.plan("opencode-free");
+    expect(plan).toMatchObject({ scope: "opencode-free", platform: "openai" });
+    expect(plan.profile).toMatchObject({ eligibleCount: 1 });
   });
 
   test("serves a warm V2 snapshot from the read-model cache", async () => {

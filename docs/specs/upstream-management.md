@@ -30,6 +30,9 @@
     UI 文档只交叉引用本节，不复制第二套规则。
 - 账号创建、分组、并发、优先级、成本和切号模板必须按平台作用域收口。
   - Codex、Claude、Grok、DeepSeek、OpenCode 与 Gemini 各自使用独立模板文件，禁止跨平台套用。
+  - OpenCode Free 实验作用域中的每个上游账号必须唯一绑定一个 Sub2API 账号。
+  - 聚合多个 OpenCode Free 上游的私有池账号不得进入该实验作用域。
+  - 单账号限流后的切号仍由 Sub2API 在该作用域的可用账号集合内完成。
 - 每个新上游在同一创建作业中完成同平台切号模板、私有探活绑定和手动探活。
   - Codex API-key 必须强制 Responses；DeepSeek 与 Gemini API-key 固定使用 Chat Completions；其他平台不套用该协议选项。
   - 初始化保留用户指定业务分组，不从候选白名单推导分组写入。
