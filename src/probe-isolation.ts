@@ -594,10 +594,7 @@ export class ProbeIsolationService {
         keyCreated: false,
       };
     }
-    const created = await userClient.mutate<Row>("POST", "/keys", {
-      name: keyName,
-      group_id: groupId,
-    }, undefined, this.remainingTimeout(deadline));
+    const created = await this.createUserKey(userClient, keyName, groupId, file, deadline);
     if (typeof created.key !== "string" || created.key.length === 0) {
       throw new Error("Sub2API 原生生成探活 Key 后未返回凭据");
     }
@@ -605,6 +602,62 @@ export class ProbeIsolationService {
       record: { accountId, groupId, userId, email, password, apiKey: created.key, ready: false, policyVersion: POLICY_VERSION },
       keyCreated: true,
     };
+  }
+
+  private async createUserKey(
+    userClient: Sub2ApiClient,
+    keyName: string,
+    groupId: number,
+    file: ProbeKeyFile,
+    deadline?: number,
+  ): Promise<Row> {
+    const create = () => userClient.mutate<Row>("POST", "/keys", {
+      name: keyName,
+      group_id: groupId,
+    }, undefined, this.remainingTimeout(deadline));
+    try {
+      return await create();
+    } catch (error) {
+      if (!/API_KEY_COUNT_EXCEEDED|api key count limit reached/iu.test(String(error))) throw error;
+      const deleted = await this.pruneInactiveProbeKeys(userClient, file, deadline);
+      if (!deleted) throw error;
+      return await create();
+    }
+  }
+
+  private async pruneInactiveProbeKeys(userClient: Sub2ApiClient, file: ProbeKeyFile, deadline?: number): Promise<boolean> {
+    let page = 1;
+    let pages = 1;
+    do {
+      const listed = await userClient.request<Paginated<Row>>(
+        `/keys?page=${page}&page_size=100&search=${encodeURIComponent("api2business-probe-")}`,
+        {}, true, this.remainingTimeout(deadline),
+      );
+      pages = Math.max(1, Number(listed.pages) || 1);
+      for (const item of pageItems(listed)) {
+        const match = /^api2business-probe-(\d+)$/u.exec(String(item.name ?? ""));
+        const keyId = id(item.id);
+        const candidateAccountId = match ? Number(match[1]) : null;
+        if (keyId === null || candidateAccountId === null) continue;
+        let disposable = false;
+        try {
+          const account = row(await this.admin.getAccount(candidateAccountId, this.remainingTimeout(deadline)));
+          disposable = String(account.status ?? "").toLowerCase() !== "active" || account.schedulable === false;
+        } catch (error) {
+          disposable = /HTTP 404\b/u.test(String(error));
+        }
+        if (!disposable) continue;
+        await userClient.mutate("DELETE", `/keys/${keyId}`, undefined, undefined, this.remainingTimeout(deadline));
+        const record = file.records[String(candidateAccountId)];
+        if (record) {
+          record.ready = false;
+          this.writeFile(file);
+        }
+        return true;
+      }
+      page += 1;
+    } while (page <= pages);
+    return false;
   }
 
   private async ensureAccountBinding(accountId: number, groupId: number, scope: ProbeIsolationScope, deadline?: number): Promise<void> {

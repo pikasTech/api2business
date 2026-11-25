@@ -191,6 +191,7 @@ export interface UpstreamSchedulingV2Scope {
   eligibleGroupIds: number[];
   idleProbeIntervalSeconds?: number;
   idleProbeCacheMode?: "full" | "compact";
+  idleProbeModels?: string[];
   features: UpstreamSchedulingV2Features;
 }
 
@@ -717,6 +718,13 @@ function readUpstreamSchedulingV2(value: unknown, path: string): UpstreamSchedul
     if (idleProbeCacheMode !== undefined && idleProbeCacheMode !== "full" && idleProbeCacheMode !== "compact") {
       throw new Error(`${scopePath}.idleProbeCacheMode must be full or compact`);
     }
+    const idleProbeModels = scope.idleProbeModels === undefined
+      ? undefined
+      : strings(scope, "idleProbeModels", scopePath).map((model) => model.trim());
+    if (idleProbeModels && (idleProbeModels.length === 0
+      || new Set(idleProbeModels.map((model) => model.toLowerCase())).size !== idleProbeModels.length)) {
+      throw new Error(`${scopePath}.idleProbeModels must contain unique model IDs`);
+    }
     scopes[name] = {
       enabled: booleanValue(scope, "enabled", scopePath),
       platform: platform as UpstreamSchedulingV2Scope["platform"],
@@ -725,6 +733,7 @@ function readUpstreamSchedulingV2(value: unknown, path: string): UpstreamSchedul
         ? {}
         : { idleProbeIntervalSeconds: integerValue(scope, "idleProbeIntervalSeconds", scopePath, 10, 3600) }),
       ...(idleProbeCacheMode === undefined ? {} : { idleProbeCacheMode }),
+      ...(idleProbeModels === undefined ? {} : { idleProbeModels }),
       features: {
         scoreRead: booleanValue(features, "scoreRead", `${scopePath}.features`),
         planRead: booleanValue(features, "planRead", `${scopePath}.features`),

@@ -109,6 +109,21 @@ describe("upstream scheduling v2 platform validation", () => {
       raw.operations.upstreamSchedulingV2.scopes.codex.idleProbeCacheMode = "bypass";
     })).toThrow("operations.upstreamSchedulingV2.scopes.codex.idleProbeCacheMode must be full or compact");
   });
+
+  test("loads the enabled OpenCode Free scope without modifying Codex probe models", () => {
+    const config = loadConfig(join(configDir, "api2business.example.yaml"));
+    expect(config.operations.upstreamSchedulingV2?.scopes["opencode-free"]).toMatchObject({
+      enabled: true, platform: "openai", eligibleGroupIds: [697],
+      idleProbeCacheMode: "full", idleProbeModels: ["deepseek-v4.1-flash"],
+      features: { idleProbe: true, priorityAutomation: true, modelSyncAutomation: false },
+    });
+    expect(config.operations.upstreamSchedulingV2?.scopes.codex.idleProbeModels).toBeUndefined();
+    for (const invalid of [[], ["flash", "FLASH"]]) {
+      expect(() => loadExampleWithMutation((raw) => {
+        raw.operations.upstreamSchedulingV2.scopes["opencode-free"].idleProbeModels = invalid;
+      })).toThrow("idleProbeModels must contain unique model IDs");
+    }
+  });
 });
 
 describe("model sync policy validation", () => {

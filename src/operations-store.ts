@@ -202,7 +202,7 @@ export class OperationsStore {
         ON api2business_oauth_runtime_samples(profile, sampled_at DESC);
       CREATE TABLE IF NOT EXISTS api2business_pool_quality_samples (
         sampled_at timestamptz NOT NULL,
-        platform text NOT NULL DEFAULT 'codex' CHECK (platform IN ('codex','claude','grok','deepseek','gemini')),
+        platform text NOT NULL DEFAULT 'codex' CHECK (platform ~ '^[a-z][a-z0-9-]{0,63}$'),
         raw_call_count integer NOT NULL DEFAULT 0,
         raw_success_requests integer NOT NULL DEFAULT 0,
         raw_failure_requests integer NOT NULL DEFAULT 0,
@@ -283,7 +283,7 @@ export class OperationsStore {
         ADD COLUMN IF NOT EXISTS sample_weighting text NOT NULL DEFAULT 'recent-call-decay-buckets';
       ALTER TABLE api2business_pool_quality_samples
         ADD CONSTRAINT api2business_pool_quality_samples_platform_check
-        CHECK (platform IN ('codex','claude','grok','deepseek','opencode','gemini')) NOT VALID;
+        CHECK (platform ~ '^[a-z][a-z0-9-]{0,63}$') NOT VALID;
       CREATE INDEX IF NOT EXISTS api2business_pool_quality_samples_time_idx
         ON api2business_pool_quality_samples(sampled_at DESC);
       CREATE TABLE IF NOT EXISTS api2business_bugteam_cost_samples (

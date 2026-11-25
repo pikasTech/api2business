@@ -76,8 +76,10 @@ export async function initializeUpstreams(
   }));
   const accounts: OnboardingAccount[] = [];
   for (const target of selected) {
-    const scope = Object.entries(config.operations.upstreamSchedulingV2?.scopes ?? {})
-      .find(([, scope]) => scope.platform === target.platform);
+    const platformScopes = Object.entries(config.operations.upstreamSchedulingV2?.scopes ?? {})
+      .filter(([, scope]) => scope.platform === target.platform);
+    const scope = platformScopes.find(([, scope]) => scope.eligibleGroupIds.some((id) => target.groupIds.includes(id)))
+      ?? platformScopes[0];
     const item: OnboardingAccount = {
       accountId: target.id, platform: target.platform, scope: scope?.[0] ?? null,
       automaticProbeEnabled: config.operations.upstreamSchedulingV2?.enabled === true

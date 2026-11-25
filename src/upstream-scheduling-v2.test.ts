@@ -77,6 +77,16 @@ function fixture(usageRows: unknown[] = [{
     score: 84,
     grade: "B",
   };
+  const opencodeFreeRow = {
+    ...row,
+    accountId: 505,
+    accountName: "opencode-free-a",
+    platform: "openai",
+    groupIds: [697],
+    groupNames: ["opencode-free"],
+    score: 82,
+    grade: "C",
+  };
   const calls = { dispatch: 0, save: 0 };
   const dispatcher = {
     dispatch: async () => {
@@ -86,13 +96,15 @@ function fixture(usageRows: unknown[] = [{
       status: "ready",
       recentCallLimit: 1000,
       refreshedAt: "2026-10-03T00:00:00.000Z",
-        accounts: [row, claudeRow, grokRow, opencodeRow],
+        accounts: [row, claudeRow, grokRow, opencodeRow, opencodeFreeRow],
       };
     },
   } as never;
   const operations = {
     poolQualitySummary: async (platform: string) => platform === "claude"
       ? ({ ok: true, platform: "claude", groupIds: [119], score: 88, grade: "B" })
+      : platform === "opencode-free"
+        ? ({ ok: true, platform: "opencode-free", groupIds: [697], score: 82, grade: "C" })
       : platform === "grok"
         ? ({ ok: true, platform: "grok", groupIds: [62], score: 86, grade: "B" })
         : ({ ok: true, platform: "codex", groupIds: [2, 3], score: 91, grade: "A" }),
@@ -107,7 +119,7 @@ function fixture(usageRows: unknown[] = [{
     getReadModelSnapshot: async () => null,
     saveReadModelSnapshot: async () => { calls.save += 1; },
   };
-  return { config, row, claudeRow, grokRow, opencodeRow, calls, operations, service: new UpstreamSchedulingV2Service(config, dispatcher, operations as never) };
+  return { config, row, claudeRow, grokRow, opencodeRow, opencodeFreeRow, calls, operations, service: new UpstreamSchedulingV2Service(config, dispatcher, operations as never) };
 }
 
 describe("upstream scheduling v2", () => {
@@ -378,6 +390,22 @@ describe("upstream scheduling v2", () => {
     const sections = snapshot.cache.sections as Record<string, { state: string }>;
     expect(sections["pool-quality"]).toMatchObject({ state: "unsupported" });
     expect(sections.errors).toMatchObject({ state: "unsupported" });
+  });
+
+  test("projects OpenCode Free pool quality by its own scope instead of Codex", async () => {
+    const { service, opencodeFreeRow } = fixture();
+    const snapshot = await service.snapshot("opencode-free");
+    expect(snapshot.scope).toBe("opencode-free");
+    expect(snapshot.platform).toBe("openai");
+    expect(snapshot.data.accounts).toHaveLength(1);
+    expect(snapshot.data.accounts[0]).toMatchObject(opencodeFreeRow);
+    expect(snapshot.data.poolQuality).toMatchObject({ platform: "opencode-free", groupIds: [697] });
+    expect(snapshot.reconciliation.checks.find((check) => check.name === "pool-quality")).toMatchObject({
+      status: "matched",
+      platform: "opencode-free",
+      groupIds: [697],
+    });
+    expect(snapshot.data.poolQuality.platform).not.toBe("codex");
   });
 
   test("serves a warm V2 snapshot from the read-model cache", async () => {

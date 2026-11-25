@@ -183,7 +183,9 @@ function localTime(value: unknown): string | null {
 
 export function normalizeBaseUrl(value: string): string {
   const parsed = new URL(value.trim());
-  if (parsed.protocol !== "https:" || parsed.username || parsed.password || parsed.search || parsed.hash) {
+  const loopback = parsed.hostname === "127.0.0.1" || parsed.hostname === "localhost" || parsed.hostname === "[::1]";
+  const secure = parsed.protocol === "https:" || (parsed.protocol === "http:" && loopback);
+  if (!secure || parsed.username || parsed.password || parsed.search || parsed.hash) {
     throw new Error("base_url 必须是没有凭据、查询参数和片段的 HTTPS URL");
   }
   return parsed.toString().replace(/\/$/u, "");

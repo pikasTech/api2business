@@ -8,6 +8,7 @@ import {
 } from "./upstream-valuation";
 import { configuredWalletKey, preferSharedWalletBalance, usageBalanceSourceAt, usageWalletKey } from "./upstream-wallet";
 import { exhaustedQuotaWindows, quotaWindowsExhausted } from "./upstream-quota-window";
+import { supportsPoolQuality } from "./pool-quality-monitor";
 
 type Row = Record<string, unknown>;
 
@@ -537,17 +538,7 @@ export class UpstreamSchedulingV2Service {
     const scoreSnapshot = object(await timed("scores", () => this.dispatcher.dispatch({ kind: "scores.get" })));
     const sourceAccounts = records(scoreSnapshot.accounts);
     const accounts = sourceAccounts.filter((row) => accountBelongsToScope(row, scope));
-    const qualityProfile = scope.platform === "openai"
-      ? "codex"
-      : scope.platform === "anthropic"
-        ? "claude"
-        : scope.platform === "grok"
-          ? "grok"
-          : scope.platform === "deepseek"
-            ? "deepseek"
-            : scope.platform === "gemini"
-              ? "gemini"
-            : null;
+    const qualityProfile = supportsPoolQuality(scope.platform) ? scopeName : null;
     const unsupportedQualityProfile = qualityProfile === null
       ? { ok: false, platform: scopeName, groupIds: scope.eligibleGroupIds,
         error: `pool-quality is not supported for ${scope.platform}` }

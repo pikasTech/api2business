@@ -244,9 +244,14 @@ export class AccountScoreService {
       const platform = String(row.platform ?? "").trim().toLowerCase();
       if (platform !== "openai" && platform !== "anthropic" && platform !== "grok" && platform !== "deepseek" && platform !== "opencode_go" && platform !== "gemini") return false;
       if (platform === "anthropic" || platform === "grok" || platform === "deepseek" || platform === "opencode_go" || platform === "gemini") return true;
-      const eligibleGroupIds = this.config.sub2api.priorityPlan.eligibleGroupIds;
+      const eligibleGroupIds = new Set(this.config.sub2api.priorityPlan.eligibleGroupIds);
+      for (const scope of Object.values(this.config.operations.upstreamSchedulingV2?.scopes ?? {})) {
+        if (scope.enabled && scope.features.scoreRead && scope.platform === "openai") {
+          for (const groupId of scope.eligibleGroupIds) eligibleGroupIds.add(groupId);
+        }
+      }
       const groupIds = Array.isArray(row.groupIds) ? row.groupIds.map(Number) : [];
-      return groupIds.some((id) => eligibleGroupIds.includes(id));
+      return groupIds.some((id) => eligibleGroupIds.has(id));
     });
   }
 

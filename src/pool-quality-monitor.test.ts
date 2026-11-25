@@ -22,7 +22,7 @@ test("pool quality uses one queued query and separates exact upstream accounts",
   } as unknown as Sub2ApiReadClient;
   const sample = await collectPoolQualitySample(loadConfig("config/api2business.example.yaml"), reads, "2026-08-03T00:00:00.000Z");
   expect(requests.map((request) => request.sql)).toEqual([boundedPoolQualitySql, boundedPoolQualitySql, poolQualitySql]);
-  expect(requests.at(-1)?.parameters).toEqual([1000, "2,3", "2026-08-03T00:00:00.000Z", "codex"]);
+  expect(requests.at(-1)?.parameters).toEqual([1000, "2,3", "2026-08-03T00:00:00.000Z", "openai"]);
   expect(sample.rawCallCount).toBe(3);
   expect(sample.rawSuccessRequests).toBe(2);
   expect(sample.rawFailureRequests).toBe(1);
@@ -66,7 +66,7 @@ test("pool sample keeps one query when the 24 hour window is full", async () => 
   const sample = await collectPoolQualitySample(loadConfig("config/api2business.example.yaml"), reads, "2026-08-03T00:00:00.000Z");
   expect(requests).toHaveLength(1);
   expect(requests[0]?.sql).toBe(boundedPoolQualitySql);
-  expect(requests[0]?.parameters).toEqual([1000, "2,3", "2026-08-03T00:00:00.000Z", "codex", "2026-08-02T00:00:00.000Z"]);
+  expect(requests[0]?.parameters).toEqual([1000, "2,3", "2026-08-03T00:00:00.000Z", "openai", "2026-08-02T00:00:00.000Z"]);
   const usageClause = boundedPoolQualitySql.slice(
     boundedPoolQualitySql.indexOf("eligible_usage AS NOT MATERIALIZED"),
     boundedPoolQualitySql.indexOf("eligible_errors AS NOT MATERIALIZED"),
@@ -183,9 +183,9 @@ test("pool quality uses the Claude whitelist and platform predicate", async () =
   } as unknown as Sub2ApiReadClient;
   const config = loadConfig("config/api2business.example.yaml");
   const sample = await collectPoolQualitySample(config, reads, "2026-08-03T00:00:00.000Z", "claude");
-  expect(parameters).toEqual([1000, "119", "2026-08-03T00:00:00.000Z", "claude"]);
+  expect(parameters).toEqual([1000, "119", "2026-08-03T00:00:00.000Z", "anthropic"]);
   expect(sample.platform).toBe("claude");
-  expect(poolQualitySql).toContain("CASE $4::text WHEN 'codex' THEN 'openai' WHEN 'claude' THEN 'anthropic'");
+  expect(poolQualitySql).toContain("LOWER(TRIM(COALESCE(a.platform, ''))) = LOWER($4::text)");
 });
 
 test("pool quality uses the Grok whitelist and platform predicate", async () => {
@@ -204,7 +204,22 @@ test("pool quality uses the Grok whitelist and platform predicate", async () => 
   const sample = await collectPoolQualitySample(config, reads, "2026-08-03T00:00:00.000Z", "grok");
   expect(parameters).toEqual([1000, "62", "2026-08-03T00:00:00.000Z", "grok"]);
   expect(sample.platform).toBe("grok");
-  expect(poolQualitySql).toContain("CASE $4::text WHEN 'codex' THEN 'openai' WHEN 'claude' THEN 'anthropic'");
+  expect(poolQualitySql).toContain("LOWER(TRIM(COALESCE(a.platform, ''))) = LOWER($4::text)");
+});
+
+test("pool quality keeps custom V2 scopes independent from their upstream platform", async () => {
+  let parameters: unknown[] = [];
+  const reads = {
+    async query(input: { parameters: unknown[] }) {
+      parameters = input.parameters;
+      return queryReceipt([]);
+    },
+    status() { throw new Error("not used"); },
+  } as unknown as Sub2ApiReadClient;
+  const config = loadConfig("config/api2business.example.yaml");
+  const sample = await collectPoolQualitySample(config, reads, "2026-08-03T00:00:00.000Z", "opencode-free");
+  expect(parameters).toEqual([1000, "697", "2026-08-03T00:00:00.000Z", "openai"]);
+  expect(sample.platform).toBe("opencode-free");
 });
 
 test("pool quality excludes every monitor-user key without changing account scoring", () => {
@@ -254,7 +269,7 @@ test("pool quality errors use the same bounded window and expose paginated model
   const result = await collectPoolQualityErrors(loadConfig("config/api2business.example.yaml"), reads, {
     sampledAt: "2026-08-05T22:12:43Z", page: 2, pageSize: 20, filter: "scoreable",
   });
-  expect(request?.parameters).toEqual([1000, "2,3", "2026-08-05T22:12:43.000Z", "codex", "scoreable", 20, 20, "2026-08-04T22:12:43.000Z"]);
+  expect(request?.parameters).toEqual([1000, "2,3", "2026-08-05T22:12:43.000Z", "openai", "scoreable", 20, 20, "2026-08-04T22:12:43.000Z"]);
   expect(request?.sql).toContain("PARTITION BY event.request_id");
   expect(request?.sql).toContain("requested_model");
   expect(request?.sql).toContain("requester.email AS user_email");

@@ -651,6 +651,41 @@ test("scope idleProbeCacheMode overrides cache heuristics for plan and run", asy
   expect(modes).toEqual(["full"]);
 });
 
+test("OpenCode Free probes only the scope model using the full prefix", async () => {
+  const scopedConfig = {
+    ...config,
+    operations: {
+      upstreamSchedulingV2: {
+        enabled: true,
+        scopes: {
+          "opencode-free": {
+            enabled: true, platform: "openai", eligibleGroupIds: [697],
+            idleProbeModels: ["deepseek-v4.1-flash"], idleProbeCacheMode: "full", features: { idleProbe: true },
+          },
+        },
+      },
+    },
+  } as unknown as AppConfig;
+  const rows = [{
+    account_id: 1, account_name: "free", platform: "openai", priority: 1, account_status: "active",
+    schedulable: true, group_ids: [697], model_mapping_keys: ["gpt-6.1-sol", "deepseek-v4.1-flash"],
+    cache_known_samples: 20, cache_hit_samples: 0, platform_cache_hit_samples: 0,
+  }];
+  const attempts: Array<{ model: string; mode: string }> = [];
+  const isolation = {
+    get: (accountId: number) => ({ accountId, groupId: 697, keyCreated: false }),
+    probe: async (_accountId: number, model: string, _timeout: number, _reasoning: string, mode: string) => {
+      attempts.push({ model, mode });
+      return { classification: "alive", ordinaryLogRecorded: true, qualityOk: true, cacheMode: mode };
+    },
+  };
+  const service = new IdleAccountProbeService(scopedConfig, reads(rows), {} as never, isolation as never);
+  const plan = await service.plan([], "manual", "opencode-free");
+  expect(plan).toMatchObject({ model: "deepseek-v4.1-flash", candidates: [{ probeModels: ["deepseek-v4.1-flash"], probeCacheMode: "full" }] });
+  expect(await service.run([], 1, "opencode-free")).toMatchObject({ attempted: 1, succeeded: 1 });
+  expect(attempts).toEqual([{ model: "deepseek-v4.1-flash", mode: "full" }]);
+});
+
 test("cache evidence SQL is account-scoped, 24 hours, and counts only explicit cache fields", () => {
   expect(idleProbeCandidatesSql).toContain("cache_known_samples");
   expect(idleProbeCandidatesSql).toContain("cache_hit_samples");

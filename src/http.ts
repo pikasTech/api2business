@@ -23,6 +23,7 @@ import { parseAlipayRevenueWindow } from "./alipay-revenue-database";
 import { parseCompletedProfitDay } from "./daily-profit-facts";
 import { normalizeExternalAccountCosts } from "./account-import-economics";
 import { projectSharedWalletUsageRows } from "./upstream-wallet";
+import { configuredPoolQualityProfiles } from "./pool-quality-monitor";
 import { createHash } from "node:crypto";
 import { createLoginThrottle, type LoginThrottle } from "./login-throttle";
 import {
@@ -469,7 +470,9 @@ export function createHandler(
       }
       if (request.method === "GET" && url.pathname === "/api/upstreams/pool-quality") {
         const platform = url.searchParams.get("platform") ?? "codex";
-        if (platform !== "codex" && platform !== "claude" && platform !== "grok" && platform !== "deepseek" && platform !== "gemini") return json({ ok: false, error: "platform must be codex, claude, grok, deepseek, or gemini" }, 400);
+        if (!configuredPoolQualityProfiles(config).includes(platform)) {
+          return json({ ok: false, error: `pool quality scope is not configured: ${platform}` }, 400);
+        }
         return json(await operations.poolQualitySummary(platform));
       }
       if (request.method === "GET" && url.pathname === "/api/upstreams/pool-quality/errors") {
@@ -477,11 +480,12 @@ export function createHandler(
         const pageSize = positiveInteger(url.searchParams.get("pageSize"), 20);
         const filter = url.searchParams.get("filter") ?? "scoreable";
         const platform = url.searchParams.get("platform") ?? "codex";
-        if (pageSize === null || pageSize > 100 || !["scoreable", "excluded", "all"].includes(filter) || !["codex", "claude", "grok", "deepseek", "gemini"].includes(platform)) {
+        if (pageSize === null || pageSize > 100 || !["scoreable", "excluded", "all"].includes(filter)
+          || !configuredPoolQualityProfiles(config).includes(platform)) {
           return json({ ok: false, error: "invalid pool quality error query" }, 400);
         }
         return json(await operations.poolQualityErrors({
-          platform: platform as "codex" | "claude" | "grok" | "deepseek" | "gemini",
+          platform,
           page,
           pageSize,
           filter: filter as "scoreable" | "excluded" | "all",

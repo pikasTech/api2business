@@ -71,7 +71,9 @@ import {
 import {
   collectPoolQualityErrors,
   collectPoolQualitySample,
+  configuredPoolQualityProfiles,
   poolQualityHistory,
+  resolvePoolQualityScope,
   type PoolQualityErrorFilter,
 } from "./pool-quality-monitor";
 import { IdleAccountProbeService } from "./idle-account-probe";
@@ -989,9 +991,9 @@ export class OperationsService {
     const valuation = readUpstreamValuationPolicy(this.config.operations.ledgerYamlPath);
     const samples = [];
     const failures: Array<{ platform: string; error: string }> = [];
-    for (const platform of ["codex", "claude", "grok", "deepseek", "gemini"] as const) {
+    for (const profile of configuredPoolQualityProfiles(this.config)) {
       try {
-        const sample = await collectPoolQualitySample(this.config, this.reads, sampledAt, platform);
+        const sample = await collectPoolQualitySample(this.config, this.reads, sampledAt, profile);
         sample.participation = sample.participation.map((item) => {
           const usage = usageById.get(item.accountId);
           const multiplier = Number(object(usage?.billingMultiplier).value);
@@ -1011,8 +1013,8 @@ export class OperationsService {
         samples.push(sample);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        console.error(JSON.stringify({ component: "pool.quality.sample", platform, error: message }));
-        failures.push({ platform, error: message });
+        console.error(JSON.stringify({ component: "pool.quality.sample", profile, error: message }));
+        failures.push({ platform: profile, error: message });
       }
     }
     const servicePolicy = await this.reconcileGatewayPolicyForSampling();
@@ -1030,9 +1032,10 @@ export class OperationsService {
     };
   }
 
-  async poolQualitySummary(platform: "codex" | "claude" | "grok" | "deepseek" | "gemini" = "codex") {
+  async poolQualitySummary(profile = "codex") {
+    const scope = resolvePoolQualityScope(this.config, profile);
     const rollingWindowPoints = 100;
-    const rows = await this.store.getPoolQualitySamplesByLimit(rollingWindowPoints * 2 - 1, platform) as Array<Record<string, unknown>>;
+    const rows = await this.store.getPoolQualitySamplesByLimit(rollingWindowPoints * 2 - 1, profile) as Array<Record<string, unknown>>;
     const history = poolQualityHistory(rows, rollingWindowPoints).slice(-rollingWindowPoints);
     const latest = rows.at(-1) ?? null;
     const sampledAt = latest ? new Date(String(latest.sampled_at)).toISOString() : null;
@@ -1042,16 +1045,9 @@ export class OperationsService {
       ok: true,
       recentCallLimit: 1000,
       rawCallCount: Number(latest?.raw_call_count ?? 0) || Number(latest?.observed_attempts ?? 0),
-      platform,
-      groupIds: (platform === "claude"
-        ? (this.config.sub2api.claudePriorityPlan ?? this.config.sub2api.priorityPlan)
-        : platform === "grok"
-          ? this.config.sub2api.grokPriorityPlan
-          : platform === "deepseek"
-            ? (this.config.sub2api.deepseekPriorityPlan ?? this.config.sub2api.priorityPlan)
-            : platform === "gemini"
-              ? (this.config.sub2api.geminiPriorityPlan ?? this.config.sub2api.priorityPlan)
-            : this.config.sub2api.priorityPlan).eligibleGroupIds,
+      platform: profile,
+      upstreamPlatform: scope.platform,
+      groupIds: scope.groupIds,
       sampledAt,
       sampleStale: sampledAt === null || Date.now() - Date.parse(sampledAt) > samplingBudgetMs,
       score: latest?.score == null ? null : Number(latest.score),
@@ -1093,7 +1089,7 @@ export class OperationsService {
   }
 
   async poolQualityErrors(input: {
-    platform: "codex" | "claude" | "grok" | "deepseek" | "gemini";
+    platform: string;
     page: number;
     pageSize: number;
     filter: PoolQualityErrorFilter;

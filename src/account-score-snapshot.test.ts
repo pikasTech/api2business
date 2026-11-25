@@ -119,6 +119,19 @@ test("rank refreshes the shared snapshot and both reads return the policy score"
       priorityPlan: plan,
       grokPriorityPlan: plan,
     },
+    operations: {
+      upstreamSchedulingV2: {
+        enabled: true,
+        scopes: {
+          "opencode-free": {
+            enabled: true,
+            platform: "openai",
+            eligibleGroupIds: [697],
+            features: { scoreRead: true },
+          },
+        },
+      },
+    },
   };
   let stored: Record<string, unknown> | null = null;
   let queriedLimit = 0;
@@ -182,6 +195,22 @@ test("rank refreshes the shared snapshot and both reads return the policy score"
           failover_requests: 0,
           first_token_samples: 0,
           selected_calls: 5,
+        }, {
+          account_id: 481,
+          account_name: "opencode-free-a",
+          platform: "openai",
+          account_type: "apikey",
+          status: "active",
+          schedulable: true,
+          priority: 400,
+          group_ids: [697],
+          group_names: ["opencode-free"],
+          success_requests: 4,
+          failure_requests: 0,
+          attributed_requests: 4,
+          failover_requests: 0,
+          first_token_samples: 0,
+          selected_calls: 4,
         }],
         cached: false,
         queueDurationMs: 1,
@@ -197,9 +226,10 @@ test("rank refreshes the shared snapshot and both reads return the policy score"
   const snapshot = await service.state();
   expect(queriedLimit).toBe(1000);
   expect(ranked.recentCallLimit).toBe(1000);
-  expect(ranked.accountCount).toBe(3);
+  expect(ranked.accountCount).toBe(4);
   expect((ranked.accounts as Array<Record<string, unknown>>).some((row) => row.platform === "anthropic")).toBe(true);
   expect((ranked.accounts as Array<Record<string, unknown>>).some((row) => row.platform === "opencode_go")).toBe(true);
+  expect((ranked.accounts as Array<Record<string, unknown>>).some((row) => row.accountId === 481)).toBe(true);
   expect((ranked.accounts as Array<Record<string, unknown>>)[0]?.score).toBe(72.3);
   expect(snapshot.accounts[0]?.score).toBe(72.3);
   expect(snapshot.accounts[0]?.score).toBe((ranked.accounts as Array<Record<string, unknown>>)[0]?.score);
