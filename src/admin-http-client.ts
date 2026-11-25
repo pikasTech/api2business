@@ -223,6 +223,9 @@ export class AdminHttpClient {
     return this.request(`/api/upstreams/usage-cache${query}`);
   }
   quotaMonitorSnapshot(): Promise<Record<string, unknown>> { return this.request("/api/upstreams/quota-monitor-snapshot", {}, 60000); }
+  quotaMonitorSample(): Promise<Record<string, unknown>> {
+    return this.request("/api/upstreams/quota-monitor/sample", { method: "POST" }, 30000);
+  }
   quotaMonitorUsage(accountIds: number[]): Promise<Record<string, unknown>> {
     return this.request(`/api/upstreams/quota-monitor-usage?accountIds=${accountIds.join(",")}`, {}, 60000);
   }

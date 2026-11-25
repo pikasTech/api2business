@@ -848,6 +848,14 @@ function emptyResultWithFailures(
   return result;
 }
 
+export function failedUpstreamUsageResult(
+  target: UpstreamUsageTarget,
+  days: number,
+  failures: string[],
+): UpstreamUsageResult {
+  return emptyResultWithFailures(target, Date.now(), days, failures);
+}
+
 export async function queryUpstreamUsageConcurrently(
   targets: UpstreamUsageTarget[],
   options: { timeoutMs: number; days: number; concurrency: number; lowQuotaRemainingPercent?: number },

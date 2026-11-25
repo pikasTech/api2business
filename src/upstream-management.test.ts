@@ -219,6 +219,49 @@ test("usage target discovery uses one queued database read", async () => {
   }
 });
 
+test("usage isolates non-HTTPS targets and continues querying supported accounts", async () => {
+  const originalFetch = globalThis.fetch;
+  let fetchCount = 0;
+  globalThis.fetch = (async () => {
+    fetchCount += 1;
+    return new Response(JSON.stringify({ mode: "unrestricted", usage: { total_tokens: 5 } }));
+  }) as unknown as typeof fetch;
+  try {
+    const config = loadConfig("config/api2business.example.yaml");
+    const reads = {
+      async query() {
+        return {
+          rows: [
+            { id: 1, name: "internal", base_url: "http://127.0.0.1:19093/v1", api_key: "sk-internal", status: "active", schedulable: true, account_api_amount_usd_total: "0" },
+            { id: 2, name: "public", base_url: "https://api.example.com/v1", api_key: "sk-public", status: "active", schedulable: true, account_api_amount_usd_total: "1" },
+          ],
+          queueDurationMs: 1,
+          queryDurationMs: 2,
+          totalDurationMs: 3,
+          queryStartedAt: new Date().toISOString(),
+          queryCompletedAt: new Date().toISOString(),
+          deduplicated: false,
+          cached: false,
+        };
+      },
+      status() { throw new Error("not used"); },
+    } as unknown as Sub2ApiReadClient;
+    const result = await new UpstreamManagementService(config, reads).usage([]);
+    expect(result).toMatchObject({ ok: true, targetCount: 2, succeeded: 1, failed: 1 });
+    const results = result.results as Array<Record<string, unknown>>;
+    expect(results[0]).toMatchObject({
+      accountId: 1,
+      ok: false,
+      error: "base_url 必须是没有凭据、查询参数和片段的 HTTPS URL",
+    });
+    expect(results[1]).toMatchObject({ accountId: 2, ok: true });
+    expect(fetchCount).toBeGreaterThan(0);
+    expect(JSON.stringify(result)).not.toContain("sk-public");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("usage target query pre-aggregates usage before joining accounts", async () => {
   const source = await Bun.file(new URL("./upstream-management.ts", import.meta.url)).text();
   expect(source).toContain("WITH usage_totals AS (");

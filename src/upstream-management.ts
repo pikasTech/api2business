@@ -7,6 +7,7 @@ import type { ProbeIsolationService } from "./probe-isolation";
 import { dirname, join } from "node:path";
 import { readApiKeyCutoffEvents, recordApiKeyCutoffEvent, type ApiKeyCutoffTrigger } from "./api-key-cutoff-ledger";
 import {
+  failedUpstreamUsageResult,
   queryUpstreamUsageConcurrently,
   type UpstreamUsageResult,
   type UpstreamUsageTarget,
@@ -1182,29 +1183,53 @@ export class UpstreamManagementService {
       ORDER BY id`,
       parameters: [accountIds.join(","), ","],
     });
-    const targets = query.rows.map((item): UpstreamUsageTarget => {
-      const baseUrl = normalizeBaseUrl(String(item.base_url ?? ""));
-      return {
+    const prepared = query.rows.map((item): {
+      target: UpstreamUsageTarget | null;
+      failure: UpstreamUsageResult | null;
+    } => {
+      const rawBaseUrl = String(item.base_url ?? "");
+      const common = {
         id: Number(item.id),
         name: String(item.name ?? ""),
-        baseUrl,
         apiKey: String(item.api_key ?? ""),
-        walletKey: configuredWalletKey(baseUrl, this.config.sub2api.newApiCredentials),
         status: String(item.status ?? "unknown"),
         schedulable: item.schedulable === true,
         apiAmountUsdTotal: Number(item.account_api_amount_usd_total ?? 0),
       };
+      try {
+        const baseUrl = normalizeBaseUrl(rawBaseUrl);
+        return {
+          target: {
+            ...common,
+            baseUrl,
+            walletKey: configuredWalletKey(baseUrl, this.config.sub2api.newApiCredentials),
+          },
+          failure: null,
+        };
+      } catch (error) {
+        return {
+          target: null,
+          failure: failedUpstreamUsageResult({
+            ...common,
+            baseUrl: rawBaseUrl,
+            walletKey: normalizeUpstreamWallet(rawBaseUrl),
+          }, settings.usageDays, [error instanceof Error ? error.message : String(error)]),
+        };
+      }
     });
-    const results = await queryUpstreamUsageConcurrently(targets, {
+    const targets = prepared.flatMap((item) => item.target ? [item.target] : []);
+    const queried = await queryUpstreamUsageConcurrently(targets, {
       concurrency: settings.usageConcurrency,
       timeoutMs: settings.usageTimeoutMs,
       days: settings.usageDays,
     });
+    let queriedIndex = 0;
+    const results = prepared.map((item) => item.failure ?? queried[queriedIndex++]!);
     return {
       ok: true,
       operation: "usage",
       requestedAccountIds: accountIds,
-      targetCount: targets.length,
+      targetCount: query.rows.length,
       succeeded: results.filter((result) => result.ok).length,
       failed: results.filter((result) => !result.ok).length,
       providers: {
