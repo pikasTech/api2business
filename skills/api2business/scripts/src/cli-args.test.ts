@@ -89,6 +89,11 @@ test("operation help returns action-specific contracts without loading config", 
   expect(String(usage.usage)).toContain("--accounts");
   expect(String(usage.verification)).toContain("quotaWindowCoverage");
   expect(JSON.stringify(usage)).toContain("workflow status");
+
+  const quotaSample = operationHelp(["upstreams", "quota-monitor", "sample", "--help"]);
+  expect(quotaSample).toMatchObject({ ok: true, command: "upstreams quota-monitor sample" });
+  expect(String(quotaSample?.usage)).toContain("--confirm");
+  expect(String(quotaSample?.verification)).toContain("sampledAt");
 });
 
 test("priority history scope keeps matching rounds and discloses omissions", () => {

@@ -75,6 +75,22 @@ export function upstreamsUsageHelp(): Record<string, unknown> {
   };
 }
 
+export function quotaMonitorSampleHelp(): Record<string, unknown> {
+  return {
+    ok: true,
+    command: "upstreams quota-monitor sample",
+    usage: `${entry} --config <owning-YAML> upstreams quota-monitor sample [--confirm] --over-api <absolute-http(s)-URL> [--json]`,
+    options: {
+      "--config": configOption,
+      "--confirm": "必填；提交一次手动额度采样作业。省略时只返回预览并设置 mutation=false",
+      "--over-api": overApiOption,
+      "--json": jsonOption,
+    },
+    behavior: "提交页面同源的 upstream.quota.sample 作业，等待同一 workflow 终态，再读取同一 quota-summary 缓存；不会修改采样间隔、余额或调度配置。",
+    verification: "只有 workflow state=completed 且 sampledAt 相对提交前前进才返回 ok=true；同时核对 stages、knownWallets、unknownWallets 与 cacheAdvanced。",
+  };
+}
+
 const idleProbeActions = ["plan", "history", "coverage", "reconcile", "run"] as const;
 
 export function idleProbeHelp(action?: string): Record<string, unknown> {
@@ -226,6 +242,8 @@ export function operationHelp(args: string[]): Record<string, unknown> | null {
   const actionAfter = (start: number, actions: readonly string[]): string | undefined => args.slice(start + 1).find((item) => actions.includes(item));
   const idleProbe = position("accounts", "idle-probe");
   if (idleProbe >= 0) return idleProbeHelp(actionAfter(idleProbe + 1, idleProbeActions));
+  const quotaMonitorSample = position("upstreams", "quota-monitor");
+  if (quotaMonitorSample >= 0 && args[quotaMonitorSample + 2] === "sample") return quotaMonitorSampleHelp();
   const scheduling = args.indexOf("upstream-scheduling-v2");
   if (scheduling >= 0) {
     const action = actionAfter(scheduling, schedulingActions);

@@ -3,6 +3,7 @@ import { observabilityHelp, configureObservability, compactObservation, checkObs
 import { runWebScreenshot, webScreenshotHelp } from "./web-screenshot";
 import { historicalBalanceHelp, nativeHelp, operationHelp, priorityHistoryHelp, upstreamsUsageHelp } from "./operation-help";
 import { measureQuotaMonitor } from './quota-monitor-measure';
+import { sampleQuotaMonitor } from './quota-monitor-sample';
 import { readSnapshotAwaitingBackgroundRefresh } from "./snapshot-read";
 import { randomUUID } from "node:crypto";
 import { AdminHttpClient } from "../../../../src/admin-http-client";
@@ -389,7 +390,7 @@ function help(): Record<string, unknown> {
       "upstreams model-alias --id <account-id> --model <alias> --upstream-model <upstream-model> [--confirm] --over-api <absolute-http(s)-URL>",
       "upstreams usage-cache [--accounts <id-or-range,...>] --over-api <absolute-http(s)-URL>",
       "upstreams quota-summary --over-api <absolute-http(s)-URL>",
-      "upstreams quota-monitor snapshot|measure [--mode source|snapshot --rounds N] --over-api <absolute-http(s)-URL>",
+      "upstreams quota-monitor snapshot|sample [--confirm]|measure [--mode source|snapshot --rounds N] --over-api <absolute-http(s)-URL>",
       "upstreams recharge-candidates [--json] --over-api <absolute-http(s)-URL>",
       "upstreams benchmark [--id <account-id> --model <id> --confirm] --over-api <absolute-http(s)-URL>",
       "upstreams benchmark-status --id <benchmark-run-id> --over-api <absolute-http(s)-URL>",
@@ -993,8 +994,28 @@ async function remote(parsed: Parsed, config: ReturnType<typeof loadConfig>, tar
   }
   if (group === "upstreams" && action === "quota-monitor") {
     if (parsed.command[2] === "snapshot") return await client.quotaMonitorSnapshot();
+    if (parsed.command[2] === "sample") {
+      if (!parsed.confirm) return {
+        ok: true,
+        mutation: false,
+        action: "upstream-quota-sample",
+        hint: "add --confirm to submit and track one quota-monitor sample",
+      };
+      const timeoutMs = (config.operations.upstreamManagement.quotaSampleTimeoutSeconds + 60) * 1000;
+      let lastProgressAt = 0;
+      return await sampleQuotaMonitor(client, {
+        timeoutMs,
+        onProgress: (event) => {
+          const elapsedMs = Number(event.elapsedMs ?? 0);
+          if (elapsedMs === 0 || elapsedMs - lastProgressAt >= 10000) {
+            lastProgressAt = elapsedMs;
+            process.stderr.write(`quota sample ${String(event.workflowId)} state=${String(event.state)} elapsed=${Math.floor(elapsedMs / 1000)}s\n`);
+          }
+        },
+      });
+    }
     if (parsed.command[2] === "measure") return await measureQuotaMonitor(client, parsed.mode ?? "snapshot", parsed.rounds ?? 1);
-    throw new Error("upstreams quota-monitor requires snapshot or measure");
+    throw new Error("upstreams quota-monitor requires snapshot, sample, or measure");
   }
   if (group === "upstreams" && action === "quota-summary") return await client.upstreamQuotaSummary();
   if (group === "upstreams" && action === "recharge-candidates") return await client.upstreamRechargeCandidates();

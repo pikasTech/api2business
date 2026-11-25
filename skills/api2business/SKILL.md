@@ -345,6 +345,8 @@ bun skills/api2business/scripts/api2business-cli.ts --config config/api2business
 - 评分与产出分母继续使用 `total_cost`。
 - 额度监控的供应商实际支出、余额缓存、缺失处理和首屏测量唯一见
   [额度监控](references/quota-monitoring.md)。
+- 手动强制采样使用 `upstreams quota-monitor sample --confirm --over-api <absolute-http(s)-URL>`；
+  默认预览，确认后追同一 workflow 终态，并以同一额度摘要的 `sampledAt` 前进作为缓存更新证据。
 - 首屏性能测量使用 `upstreams quota-monitor measure --mode snapshot|source --rounds N --over-api <absolute-http(s)-URL>`；
   `snapshot` 测缓存读模型，`source` 对照页面依赖链，输出只含耗时摘要，不展开账号或 Secret。
 
