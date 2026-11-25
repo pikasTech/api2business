@@ -164,6 +164,12 @@ export class AdminHttpClient {
       body: JSON.stringify({ ...input, operationId }),
     }, 30000);
   }
+  upstreamScopeCapacity(scope: string, capacity: number): Promise<Record<string, unknown>> {
+    return this.request("/api/upstreams/capacity", {
+      method: "POST",
+      body: JSON.stringify({ scope, capacity }),
+    }, 120000);
+  }
   upstreamRecharge(id: number, amountCny: number, operationId: string): Promise<Record<string, unknown>> {
     return this.request(`/api/upstreams/${id}/recharge`, {
       method: "POST",

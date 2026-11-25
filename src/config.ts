@@ -189,6 +189,7 @@ export interface UpstreamSchedulingV2Scope {
   enabled: boolean;
   platform: "openai" | "anthropic" | "grok" | "deepseek" | "opencode_go" | "command_code" | "gemini";
   eligibleGroupIds: number[];
+  accountCapacity?: number;
   priorityPlan?: PriorityPlanPolicy;
   idleProbeIntervalSeconds?: number;
   idleProbeCacheMode?: "full" | "compact";
@@ -714,6 +715,9 @@ function readUpstreamSchedulingV2(value: unknown, path: string): UpstreamSchedul
     }
     const eligibleGroupIds = integers(scope, "eligibleGroupIds", scopePath, 1, Number.MAX_SAFE_INTEGER);
     if (eligibleGroupIds.length === 0) throw new Error(`${scopePath}.eligibleGroupIds must not be empty`);
+    const accountCapacity = scope.accountCapacity === undefined
+      ? undefined
+      : integerValue(scope, "accountCapacity", scopePath, 1, 100000);
     const idleProbeCacheMode = scope.idleProbeCacheMode === undefined
       ? undefined
       : stringValue(scope, "idleProbeCacheMode", scopePath).trim();
@@ -750,10 +754,14 @@ function readUpstreamSchedulingV2(value: unknown, path: string): UpstreamSchedul
       && (idleProbeIntervalSeconds === undefined || idleProbeIntervalSeconds < 3600)) {
       throw new Error(`${scopePath}.idleProbeIntervalSeconds must be at least 3600 for shared-outlet protection`);
     }
+    if (name === "opencode-free" && accountCapacity !== 1) {
+      throw new Error(`${scopePath}.accountCapacity must be 1 for shared-outlet protection`);
+    }
     scopes[name] = {
       enabled: booleanValue(scope, "enabled", scopePath),
       platform: platform as UpstreamSchedulingV2Scope["platform"],
       eligibleGroupIds: [...new Set(eligibleGroupIds)].sort((a, b) => a - b),
+      ...(accountCapacity === undefined ? {} : { accountCapacity }),
       ...(priorityPlan === undefined
         ? {}
         : { priorityPlan: { ...priorityPlan, platform, eligibleGroupIds: [...new Set(eligibleGroupIds)].sort((a, b) => a - b) } }),

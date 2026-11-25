@@ -614,6 +614,7 @@ operations:
         enabled: true
         platform: openai
         eligibleGroupIds: [ 697 ]
+        accountCapacity: 1
         priorityPlan:
           platform: openai
           eligibleGroupIds: [ 697 ]

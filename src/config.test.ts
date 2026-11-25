@@ -114,6 +114,7 @@ describe("upstream scheduling v2 platform validation", () => {
     const config = loadConfig(join(configDir, "api2business.example.yaml"));
     expect(config.operations.upstreamSchedulingV2?.scopes["opencode-free"]).toMatchObject({
       enabled: true, platform: "openai", eligibleGroupIds: [697],
+      accountCapacity: 1,
       priorityPlan: {
         platform: "openai", eligibleGroupIds: [697],
         evidenceTargetAttempts: 50, evidenceTargetFirstTokenSamples: 20,
@@ -140,6 +141,12 @@ describe("upstream scheduling v2 platform validation", () => {
   });
 
   test("enforces OpenCode Free shared-outlet probe limits", () => {
+    expect(() => loadExampleWithMutation((raw) => {
+      raw.operations.upstreamSchedulingV2.scopes["opencode-free"].accountCapacity = 2;
+    })).toThrow("accountCapacity must be 1 for shared-outlet protection");
+    expect(() => loadExampleWithMutation((raw) => {
+      delete raw.operations.upstreamSchedulingV2.scopes["opencode-free"].accountCapacity;
+    })).toThrow("accountCapacity must be 1 for shared-outlet protection");
     expect(() => loadExampleWithMutation((raw) => {
       raw.operations.upstreamSchedulingV2.scopes["opencode-free"].idleProbeCandidateLimit = 20;
     })).toThrow("idleProbeCandidateLimit must be 1 for shared-outlet protection");

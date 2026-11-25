@@ -547,6 +547,21 @@ test("bulk API-key configuration without credentials preserves existing template
   }) }]);
 });
 
+test("account concurrency bulk update uses native capacity and verifies the reported count", async () => {
+  const calls: Array<{ path: string; body: Record<string, unknown>; timeoutMs?: number }> = [];
+  const client = { mutate: async (_method: string, path: string, body: Record<string, unknown>, _key?: string, timeoutMs?: number) => {
+    calls.push({ path, body, timeoutMs });
+    return { success: 2, failed: 0, success_ids: [1627, 1628] };
+  } } as unknown as Sub2ApiClient;
+  const runtime = new Sub2ApiRuntimeService(client);
+  const result = await runtime.setAccountConcurrency([1628, 1627], 1, 120000);
+  expect(result).toMatchObject({ accountIds: [1627, 1628], configured: 2, concurrency: 1 });
+  expect(calls).toEqual([{ path: "/admin/accounts/bulk-update", timeoutMs: 120000, body: {
+    account_ids: [1627, 1628],
+    concurrency: 1,
+  } }]);
+});
+
 test("bulk API-key isolation patch preserves existing pool and template fields", async () => {
   const calls: Array<Record<string, unknown>> = [];
   const client = { mutate: async (_method: string, _path: string, body: Record<string, unknown>) => {

@@ -468,6 +468,12 @@ export function createHandler(
       if (request.method === "GET" && url.pathname === "/api/upstreams/recharge-candidates") {
         return json(await operations.upstreamRechargeCandidates());
       }
+      if (request.method === "POST" && url.pathname === "/api/upstreams/capacity") {
+        const input = await body(request);
+        const scope = typeof input.scope === "string" ? input.scope.trim() : "";
+        if (!scope) return json({ ok: false, error: "capacity update requires scope" }, 400);
+        return json(await upstreams.updateScopeCapacity(scope, input.capacity));
+      }
       if (request.method === "GET" && url.pathname === "/api/upstreams/pool-quality") {
         const platform = url.searchParams.get("platform") ?? "codex";
         if (!configuredPoolQualityProfiles(config).includes(platform)) {

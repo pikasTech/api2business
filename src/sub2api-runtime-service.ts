@@ -590,6 +590,26 @@ export class Sub2ApiRuntimeService {
     return { accountIds: ids, configured: success, result };
   }
 
+  async setAccountConcurrency(accountIds: number[], concurrency: number, timeoutMs?: number): Promise<Record<string, unknown>> {
+    const ids = [...new Set(accountIds)].sort((left, right) => left - right);
+    if (ids.length === 0 || ids.some((id) => !Number.isSafeInteger(id) || id < 1)) {
+      throw new Error("account concurrency update requires stable positive account IDs");
+    }
+    if (!Number.isSafeInteger(concurrency) || concurrency < 1 || concurrency > 100000) {
+      throw new Error("account concurrency must be an integer from 1 to 100000");
+    }
+    const result = await this.client.mutate<BulkUpdateResult>("POST", "/admin/accounts/bulk-update", {
+      account_ids: ids,
+      concurrency,
+    }, undefined, timeoutMs);
+    const failed = Number(result.failed ?? 0);
+    const success = Number(result.success ?? ids.length);
+    if (failed > 0 || success !== ids.length) {
+      throw new Error(`Sub2API bulk concurrency update updated ${success}/${ids.length}, failed ${failed}`);
+    }
+    return { accountIds: ids, configured: success, concurrency, result };
+  }
+
   async setSchedulableAccounts(accountIds: number[], schedulable: boolean, timeoutMs?: number): Promise<Record<string, unknown>> {
     const ids = [...new Set(accountIds)].sort((left, right) => left - right);
     if (ids.length === 0 || ids.some((id) => !Number.isSafeInteger(id) || id < 1)) {
