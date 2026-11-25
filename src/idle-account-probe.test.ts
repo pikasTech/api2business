@@ -664,7 +664,7 @@ test("OpenCode Free probes only the scope model using the full prefix", async ()
           "opencode-free": {
             enabled: true, platform: "openai", eligibleGroupIds: [697],
             idleProbeModels: ["deepseek-v4.1-flash"], idleProbeCacheMode: "full",
-            idleProbeCandidateLimit: 37, features: { idleProbe: true },
+            idleProbeCandidateLimit: 1, features: { idleProbe: true },
           },
         },
       },
@@ -686,10 +686,36 @@ test("OpenCode Free probes only the scope model using the full prefix", async ()
   };
   const service = new IdleAccountProbeService(scopedConfig, reads(rows, queryParameters), {} as never, isolation as never);
   const plan = await service.plan([], "manual", "opencode-free");
-  expect(plan).toMatchObject({ model: "deepseek-v4.1-flash", candidateLimit: 37, candidates: [{ probeModels: ["deepseek-v4.1-flash"], probeCacheMode: "full" }] });
-  expect(queryParameters.some((parameters) => parameters[3] === 37)).toBeTrue();
+  expect(plan).toMatchObject({ model: "deepseek-v4.1-flash", candidateLimit: 1, candidates: [{ probeModels: ["deepseek-v4.1-flash"], probeCacheMode: "full" }] });
+  expect(queryParameters.some((parameters) => parameters[3] === 1)).toBeTrue();
   expect(await service.run([], 1, "opencode-free")).toMatchObject({ attempted: 1, succeeded: 1 });
   expect(attempts).toEqual([{ model: "deepseek-v4.1-flash", mode: "full" }]);
+});
+
+test("OpenCode Free explicit manual probes stay untruncated by the automatic limit", async () => {
+  const scopedConfig = {
+    ...config,
+    operations: {
+      upstreamSchedulingV2: {
+        enabled: true,
+        scopes: {
+          "opencode-free": {
+            enabled: true, platform: "openai", eligibleGroupIds: [697],
+            idleProbeCandidateLimit: 1, features: { idleProbe: true },
+          },
+        },
+      },
+    },
+  } as unknown as AppConfig;
+  const queryParameters: unknown[][] = [];
+  const service = new IdleAccountProbeService(scopedConfig, reads([1, 2].map((accountId) => ({
+    account_id: accountId, account_name: `free-${accountId}`, platform: "openai", priority: 1,
+    account_status: "active", schedulable: true, group_ids: [697],
+  })), queryParameters), null);
+
+  const plan = await service.plan([1, 2], "manual", "opencode-free");
+  expect(plan).toMatchObject({ candidateLimit: 1 });
+  expect(queryParameters.some((parameters) => parameters[3] === 2)).toBeTrue();
 });
 
 test("cache evidence SQL is account-scoped, 24 hours, and counts only explicit cache fields", () => {

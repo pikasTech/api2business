@@ -723,6 +723,9 @@ function readUpstreamSchedulingV2(value: unknown, path: string): UpstreamSchedul
     const idleProbeCandidateLimit = scope.idleProbeCandidateLimit === undefined
       ? undefined
       : integerValue(scope, "idleProbeCandidateLimit", scopePath, 1, 1000);
+    const idleProbeIntervalSeconds = scope.idleProbeIntervalSeconds === undefined
+      ? undefined
+      : integerValue(scope, "idleProbeIntervalSeconds", scopePath, 10, 3600);
     const idleProbeModels = scope.idleProbeModels === undefined
       ? undefined
       : strings(scope, "idleProbeModels", scopePath).map((model) => model.trim());
@@ -739,6 +742,14 @@ function readUpstreamSchedulingV2(value: unknown, path: string): UpstreamSchedul
     if (priorityPlan && priorityPlan.eligibleGroupIds.join(",") !== [...new Set(eligibleGroupIds)].sort((a, b) => a - b).join(",")) {
       throw new Error(`${scopePath}.priorityPlan.eligibleGroupIds must match ${scopePath}.eligibleGroupIds`);
     }
+    const idleProbeEnabled = booleanValue(features, "idleProbe", `${scopePath}.features`);
+    if (name === "opencode-free" && idleProbeEnabled && idleProbeCandidateLimit !== 1) {
+      throw new Error(`${scopePath}.idleProbeCandidateLimit must be 1 for shared-outlet protection`);
+    }
+    if (name === "opencode-free" && idleProbeEnabled
+      && (idleProbeIntervalSeconds === undefined || idleProbeIntervalSeconds < 3600)) {
+      throw new Error(`${scopePath}.idleProbeIntervalSeconds must be at least 3600 for shared-outlet protection`);
+    }
     scopes[name] = {
       enabled: booleanValue(scope, "enabled", scopePath),
       platform: platform as UpstreamSchedulingV2Scope["platform"],
@@ -746,9 +757,7 @@ function readUpstreamSchedulingV2(value: unknown, path: string): UpstreamSchedul
       ...(priorityPlan === undefined
         ? {}
         : { priorityPlan: { ...priorityPlan, platform, eligibleGroupIds: [...new Set(eligibleGroupIds)].sort((a, b) => a - b) } }),
-      ...(scope.idleProbeIntervalSeconds === undefined
-        ? {}
-        : { idleProbeIntervalSeconds: integerValue(scope, "idleProbeIntervalSeconds", scopePath, 10, 3600) }),
+      ...(idleProbeIntervalSeconds === undefined ? {} : { idleProbeIntervalSeconds }),
       ...(idleProbeCacheMode === undefined ? {} : { idleProbeCacheMode }),
       ...(idleProbeCandidateLimit === undefined ? {} : { idleProbeCandidateLimit }),
       ...(idleProbeModels === undefined ? {} : { idleProbeModels }),
@@ -757,7 +766,7 @@ function readUpstreamSchedulingV2(value: unknown, path: string): UpstreamSchedul
         planRead: booleanValue(features, "planRead", `${scopePath}.features`),
         planWrite: booleanValue(features, "planWrite", `${scopePath}.features`),
         priorityAutomation: booleanValue(features, "priorityAutomation", `${scopePath}.features`),
-        idleProbe: booleanValue(features, "idleProbe", `${scopePath}.features`),
+        idleProbe: idleProbeEnabled,
         upstreamWrite: booleanValue(features, "upstreamWrite", `${scopePath}.features`),
         modelSyncAutomation: booleanValue(features, "modelSyncAutomation", `${scopePath}.features`),
       },

@@ -658,9 +658,9 @@ operations:
               - 用户额度不足
               - 预扣费额度失败
               - 欠费
-        idleProbeIntervalSeconds: 180
+        idleProbeIntervalSeconds: 3600
         idleProbeCacheMode: full
-        idleProbeCandidateLimit: 20
+        idleProbeCandidateLimit: 1
         idleProbeModels: [ deepseek-v4.1-flash ]
         features:
           scoreRead: true

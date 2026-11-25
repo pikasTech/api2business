@@ -37,6 +37,7 @@ operations:
       grok: { enabled: true, platform: grok, features: { priorityAutomation: true, idleProbe: true } }
       deepseek: { enabled: true, platform: deepseek, features: { priorityAutomation: true, idleProbe: true, modelSyncAutomation: true } }
       opencode: { enabled: true, platform: opencode_go, features: { priorityAutomation: true, idleProbe: true, modelSyncAutomation: true } }
+      opencode-free: { enabled: true, platform: openai, idleProbeIntervalSeconds: 3600, features: { priorityAutomation: false, idleProbe: true, modelSyncAutomation: false } }
       commandcode: { enabled: true, platform: command_code, features: { priorityAutomation: true, idleProbe: true, modelSyncAutomation: false } }
       gemini: { enabled: true, platform: gemini, features: { priorityAutomation: true, idleProbe: true, modelSyncAutomation: true } }
   upstreamManagement: { quotaSampleIntervalSeconds: 300, quotaSampleTimeoutSeconds: 240 }
@@ -73,10 +74,10 @@ runtime:
 	if !cfg.AutomaticRefreshEnabled || cfg.V2AutomationIntervalSeconds != 120 || cfg.V2AutomationRecentCallLimit != 1000 {
 		t.Fatalf("missing periodic worker config: %#v", cfg)
 	}
-	if strings.Join(cfg.V2IdleProbeScopes, ",") != "claude,codex,commandcode,deepseek,gemini,grok,opencode" {
+	if strings.Join(cfg.V2IdleProbeScopes, ",") != "claude,codex,commandcode,deepseek,gemini,grok,opencode,opencode-free" {
 		t.Fatalf("expected every enabled idle probe scope including command_code and opencode_go, got %#v", cfg.V2IdleProbeScopes)
 	}
-	if cfg.V2IdleProbeIntervals["codex"] != 60 || cfg.V2IdleProbeIntervals["claude"] != 300 || cfg.V2IdleProbeIntervals["grok"] != 60 {
+	if cfg.V2IdleProbeIntervals["codex"] != 60 || cfg.V2IdleProbeIntervals["claude"] != 300 || cfg.V2IdleProbeIntervals["grok"] != 60 || cfg.V2IdleProbeIntervals["opencode-free"] != 3600 {
 		t.Fatalf("unexpected scoped idle probe intervals: %#v", cfg.V2IdleProbeIntervals)
 	}
 	if strings.Join(cfg.V2ModelSyncScopes, ",") != "gemini" {
@@ -84,6 +85,16 @@ runtime:
 	}
 	if strings.Join(cfg.V2AutomaticDisabledPlatforms, ",") != "command_code,deepseek,opencode_go" {
 		t.Fatalf("expected YAML-owned disabled platforms, got %#v", cfg.V2AutomaticDisabledPlatforms)
+	}
+
+	invalidPath := filepath.Join(t.TempDir(), "api2business-invalid.yaml")
+	if err := os.WriteFile(invalidPath, []byte(strings.Replace(data, "idleProbeIntervalSeconds: 3600", "idleProbeIntervalSeconds: 180", 1)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadConfig([]string{"--config", invalidPath, "--runtime", "native"}, func(key string) string {
+		return map[string]string{"TEMPORAL_ADDRESS": "127.0.0.1:7233", "API_TOKEN": "test-token"}[key]
+	}); err == nil || !strings.Contains(err.Error(), "at least 3600") {
+		t.Fatalf("expected OpenCode Free interval validation, got %v", err)
 	}
 }
 
