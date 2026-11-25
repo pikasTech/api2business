@@ -140,6 +140,59 @@ function account(id: number, name: string, score: number, available = true, erro
   };
 }
 
+test("custom V2 scopes produce an independent priority profile for their own groups", () => {
+  const scopedConfig = structuredClone(config);
+  scopedConfig.operations.upstreamSchedulingV2 = {
+    enabled: true,
+    defaultScope: "opencode-free",
+    readModelCacheSeconds: 30,
+    readModelRefreshTimeoutSeconds: 60,
+    automation: { intervalSeconds: 600, recentCallLimit: 1000 },
+    modelSync: { batchSize: 10, intervalSeconds: 600 },
+    scopes: {
+      "opencode-free": {
+        enabled: true,
+        platform: "openai",
+        eligibleGroupIds: [697],
+        priorityPlan: {
+          ...scopedConfig.sub2api.priorityPlan,
+          eligibleGroupIds: [697],
+          reliabilityWeight: 40,
+          latencyWeight: 30,
+          costWeight: 20,
+          evidenceWeight: 10,
+        },
+        features: {
+          scoreRead: true,
+          planRead: true,
+          planWrite: false,
+          priorityAutomation: true,
+          idleProbe: true,
+          upstreamWrite: false,
+          modelSyncAutomation: false,
+        },
+      },
+    },
+  };
+  const plan = buildAccountPriorityPlan({ recentCallLimit: 1000, accounts: [
+    { ...account(701, "https://free-01.example v1 free-01 0.01", 96), groupIds: [697] },
+    { ...account(702, "https://free-02.example v1 free-02 0.01", 88), groupIds: [697] },
+    account(703, "https://codex.example v1 codex 0.1", 90),
+  ] }, scopedConfig);
+
+  expect((plan.profiles as Record<string, any>)["opencode-free"]).toMatchObject({ eligibleCount: 2 });
+  expect((plan.policy as Record<string, any>)["opencode-free"]).toMatchObject({
+    platform: "openai",
+    eligibleGroupIds: [697],
+    reliabilityWeight: 40,
+  });
+  const scopedChanges = (plan.changes as Array<Record<string, any>>)
+    .filter((change) => change.profile === "opencode-free");
+  expect(scopedChanges.map((change) => change.accountId).sort()).toEqual([701, 702]);
+  expect(scopedChanges.some((change) => change.accountId === 703)).toBeFalse();
+  expect(scopedChanges.every((change) => change.profile === "opencode-free")).toBeTrue();
+});
+
 test("priority plan reports billing depletion and moves unavailable accounts to the top-k tail", () => {
   const plan = buildAccountPriorityPlan({ recentCallLimit: 1000, accounts: [
     account(1, "https://alpha.example pro 0.1", 95, false, "403 Insufficient account balance"),

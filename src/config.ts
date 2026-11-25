@@ -189,8 +189,10 @@ export interface UpstreamSchedulingV2Scope {
   enabled: boolean;
   platform: "openai" | "anthropic" | "grok" | "deepseek" | "opencode_go" | "command_code" | "gemini";
   eligibleGroupIds: number[];
+  priorityPlan?: PriorityPlanPolicy;
   idleProbeIntervalSeconds?: number;
   idleProbeCacheMode?: "full" | "compact";
+  idleProbeCandidateLimit?: number;
   idleProbeModels?: string[];
   features: UpstreamSchedulingV2Features;
 }
@@ -718,6 +720,9 @@ function readUpstreamSchedulingV2(value: unknown, path: string): UpstreamSchedul
     if (idleProbeCacheMode !== undefined && idleProbeCacheMode !== "full" && idleProbeCacheMode !== "compact") {
       throw new Error(`${scopePath}.idleProbeCacheMode must be full or compact`);
     }
+    const idleProbeCandidateLimit = scope.idleProbeCandidateLimit === undefined
+      ? undefined
+      : integerValue(scope, "idleProbeCandidateLimit", scopePath, 1, 1000);
     const idleProbeModels = scope.idleProbeModels === undefined
       ? undefined
       : strings(scope, "idleProbeModels", scopePath).map((model) => model.trim());
@@ -725,14 +730,27 @@ function readUpstreamSchedulingV2(value: unknown, path: string): UpstreamSchedul
       || new Set(idleProbeModels.map((model) => model.toLowerCase())).size !== idleProbeModels.length)) {
       throw new Error(`${scopePath}.idleProbeModels must contain unique model IDs`);
     }
+    const priorityPlan = scope.priorityPlan === undefined
+      ? undefined
+      : readPriorityPlanPolicy(scope.priorityPlan, `${scopePath}.priorityPlan`);
+    if (priorityPlan && priorityPlan.platform !== platform) {
+      throw new Error(`${scopePath}.priorityPlan.platform must match ${scopePath}.platform`);
+    }
+    if (priorityPlan && priorityPlan.eligibleGroupIds.join(",") !== [...new Set(eligibleGroupIds)].sort((a, b) => a - b).join(",")) {
+      throw new Error(`${scopePath}.priorityPlan.eligibleGroupIds must match ${scopePath}.eligibleGroupIds`);
+    }
     scopes[name] = {
       enabled: booleanValue(scope, "enabled", scopePath),
       platform: platform as UpstreamSchedulingV2Scope["platform"],
       eligibleGroupIds: [...new Set(eligibleGroupIds)].sort((a, b) => a - b),
+      ...(priorityPlan === undefined
+        ? {}
+        : { priorityPlan: { ...priorityPlan, platform, eligibleGroupIds: [...new Set(eligibleGroupIds)].sort((a, b) => a - b) } }),
       ...(scope.idleProbeIntervalSeconds === undefined
         ? {}
         : { idleProbeIntervalSeconds: integerValue(scope, "idleProbeIntervalSeconds", scopePath, 10, 3600) }),
       ...(idleProbeCacheMode === undefined ? {} : { idleProbeCacheMode }),
+      ...(idleProbeCandidateLimit === undefined ? {} : { idleProbeCandidateLimit }),
       ...(idleProbeModels === undefined ? {} : { idleProbeModels }),
       features: {
         scoreRead: booleanValue(features, "scoreRead", `${scopePath}.features`),

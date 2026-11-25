@@ -23,13 +23,16 @@ const config = {
   },
 } as unknown as AppConfig;
 
-function reads(rows: Array<Record<string, unknown>>): Sub2ApiReadClient {
+function reads(rows: Array<Record<string, unknown>>, queries: unknown[][] = []): Sub2ApiReadClient {
   return {
-    query: async <Row extends Record<string, unknown>>() => ({
-      rows: rows as Row[], queueDurationMs: 0, queryDurationMs: 1, totalDurationMs: 1,
-      queryStartedAt: new Date().toISOString(), queryCompletedAt: new Date().toISOString(),
-      deduplicated: false, cached: false,
-    }),
+    query: async <Row extends Record<string, unknown>>(input: { parameters: unknown[] }) => {
+      queries.push(input.parameters);
+      return {
+        rows: rows as Row[], queueDurationMs: 0, queryDurationMs: 1, totalDurationMs: 1,
+        queryStartedAt: new Date().toISOString(), queryCompletedAt: new Date().toISOString(),
+        deduplicated: false, cached: false,
+      };
+    },
     status: () => ({}) as ReturnType<Sub2ApiReadClient["status"]>,
   };
 }
@@ -660,7 +663,8 @@ test("OpenCode Free probes only the scope model using the full prefix", async ()
         scopes: {
           "opencode-free": {
             enabled: true, platform: "openai", eligibleGroupIds: [697],
-            idleProbeModels: ["deepseek-v4.1-flash"], idleProbeCacheMode: "full", features: { idleProbe: true },
+            idleProbeModels: ["deepseek-v4.1-flash"], idleProbeCacheMode: "full",
+            idleProbeCandidateLimit: 37, features: { idleProbe: true },
           },
         },
       },
@@ -672,6 +676,7 @@ test("OpenCode Free probes only the scope model using the full prefix", async ()
     cache_known_samples: 20, cache_hit_samples: 0, platform_cache_hit_samples: 0,
   }];
   const attempts: Array<{ model: string; mode: string }> = [];
+  const queryParameters: unknown[][] = [];
   const isolation = {
     get: (accountId: number) => ({ accountId, groupId: 697, keyCreated: false }),
     probe: async (_accountId: number, model: string, _timeout: number, _reasoning: string, mode: string) => {
@@ -679,9 +684,10 @@ test("OpenCode Free probes only the scope model using the full prefix", async ()
       return { classification: "alive", ordinaryLogRecorded: true, qualityOk: true, cacheMode: mode };
     },
   };
-  const service = new IdleAccountProbeService(scopedConfig, reads(rows), {} as never, isolation as never);
+  const service = new IdleAccountProbeService(scopedConfig, reads(rows, queryParameters), {} as never, isolation as never);
   const plan = await service.plan([], "manual", "opencode-free");
-  expect(plan).toMatchObject({ model: "deepseek-v4.1-flash", candidates: [{ probeModels: ["deepseek-v4.1-flash"], probeCacheMode: "full" }] });
+  expect(plan).toMatchObject({ model: "deepseek-v4.1-flash", candidateLimit: 37, candidates: [{ probeModels: ["deepseek-v4.1-flash"], probeCacheMode: "full" }] });
+  expect(queryParameters.some((parameters) => parameters[3] === 37)).toBeTrue();
   expect(await service.run([], 1, "opencode-free")).toMatchObject({ attempted: 1, succeeded: 1 });
   expect(attempts).toEqual([{ model: "deepseek-v4.1-flash", mode: "full" }]);
 });

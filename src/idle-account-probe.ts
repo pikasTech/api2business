@@ -372,15 +372,16 @@ export class IdleAccountProbeService {
     const groupIds = scope?.eligibleGroupIds ?? this.config.sub2api.priorityPlan.eligibleGroupIds;
     const probePlatform = scope?.platform ?? this.config.sub2api.priorityPlan.platform;
     const defaultProbeModel = scope?.idleProbeModels?.[0] ?? policy.platformModels?.[probePlatform]?.[0] ?? policy.model;
+    const candidateLimit = scope?.idleProbeCandidateLimit ?? policy.candidateLimit;
     const result = await this.reads.query<Record<string, unknown>>({
-      key: JSON.stringify(["accounts.idle-probe.plan", scopeName ?? null, explicit, policy.idleSeconds, policy.candidateLimit]),
+      key: JSON.stringify(["accounts.idle-probe.plan", scopeName ?? null, explicit, policy.idleSeconds, candidateLimit]),
       kind: "accounts.idle-probe.plan",
       sql: idleProbeCandidatesSql,
       parameters: [
         probePlatform,
         groupIds.join(","),
         policy.idleSeconds,
-        explicit.length > 0 ? explicit.length : policy.candidateLimit,
+        explicit.length > 0 ? explicit.length : candidateLimit,
         explicit.length > 0 ? explicit.join(",") : null,
         explicit.length > 0,
         explicit.length > 0 && !scopeName,
@@ -428,7 +429,7 @@ export class IdleAccountProbeService {
       mutation: false,
       model: defaultProbeModel,
       idleSeconds: policy.idleSeconds,
-      candidateLimit: policy.candidateLimit,
+      candidateLimit,
       candidates,
       rolling24Hours,
       databaseQueries: includeRollingUsage ? 2 : 1,
