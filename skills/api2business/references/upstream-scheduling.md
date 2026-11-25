@@ -952,7 +952,7 @@
 - 相对脚本路径必须从仓库根目录执行。
   - `Module not found` 表示路径不存在，不表示命令未实现。
 - `scores pool-quality` 不带作用域时只读取 Codex。
-  - 其他作用域使用 `--scope` 或 `--platform`，取值 `codex|claude|grok|deepseek|gemini`。
+  - 其他作用域使用 `--scope` 或 `--platform`，取值来自 owning YAML 的已配置 scope。
   - 未知值或两个参数不一致时直接失败。
   - 人类回执打印 `platform`。不能把 Codex 分数当成其他作用域。
   - 新鲜度仍只认该作用域的 `sampledAt`。窗口规则见上文池级大表查询。
