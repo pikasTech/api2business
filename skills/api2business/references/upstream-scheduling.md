@@ -369,6 +369,7 @@
     - `opencode-free.accountCapacity` 必须为 1；使用
       `upstreams capacity --scope opencode-free --confirm --over-api <absolute-http(s)-URL>`
       读取该作用域全部分组成员，一次批量写入每个账号的原生 `concurrency=1`，再逐账号回读。
+    - 已全部对齐时只读核验并返回 `mutation=false`，不重复提交 bulk-update。
     - 该容量是账号级并发，不是分组级全局并发；增删成员后重跑同一命令即可收敛。
   - 探活候选计划必须使用一次集合聚合查询，再按账号回补私有探活分组的用量和错误；
     禁止恢复逐账号 `LATERAL` 或相关子查询。该查询属于自动读队列，必须在读代理语句

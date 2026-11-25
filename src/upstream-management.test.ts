@@ -115,6 +115,38 @@ test("scope capacity update applies every member and verifies native readback", 
   expect(queries[0]?.parameters).toEqual(["697", "openai"]);
 });
 
+test("scope capacity update skips native writes when every member is already aligned", async () => {
+  const config = loadConfig("config/api2business.example.yaml");
+  let queryCount = 0;
+  const reads = {
+    query: async () => {
+      queryCount += 1;
+      return { rows: [
+        { id: 1627, name: "free-a", platform: "openai", concurrency: 1, status: "active", schedulable: true },
+        { id: 1628, name: "free-b", platform: "openai", concurrency: 1, status: "active", schedulable: true },
+      ] };
+    },
+  } as unknown as Sub2ApiReadClient;
+  const runtime = {
+    setAccountConcurrency: async () => {
+      throw new Error("aligned capacity must not write");
+    },
+  } as never;
+  const service = new UpstreamManagementService(config, reads, null, runtime);
+
+  const result = await service.updateScopeCapacity("opencode-free");
+
+  expect(result).toMatchObject({
+    ok: true,
+    mutation: false,
+    accountCount: 2,
+    changedCount: 0,
+    verifiedCount: 2,
+    mutationResult: null,
+  });
+  expect(queryCount).toBe(1);
+});
+
 test("quota monitor excludes wallets from owning YAML", () => {
   const config = loadConfig("config/api2business.example.yaml");
   expect(config.operations.upstreamManagement.quotaMonitor.excludedWalletKeys).toContain("https://sub.api2business.com");
