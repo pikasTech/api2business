@@ -1772,15 +1772,21 @@ export class OperationsService {
         const profileSummary = object(object(result).profiles);
         const operatorScope = String(row.created_by ?? row.operator ?? "")
           .match(/^v2-scheduler:([a-z0-9_-]+)$/)?.[1] ?? null;
+        const configuredProfiles = Object.keys(this.config.operations.upstreamSchedulingV2?.scopes ?? {});
         const defaultProfile = operatorScope !== null
-          && ["codex", "claude", "grok", "deepseek", "opencode", "gemini"].includes(operatorScope)
+          && (
+            ["codex", "claude", "grok", "deepseek", "opencode", "gemini"].includes(operatorScope)
+            || configuredProfiles.includes(operatorScope)
+          )
           ? operatorScope
           : "codex";
         const discoveredProfiles = new Set([
           ...Object.keys(profileSummary),
           ...changes.map((change) => String(change.profile ?? defaultProfile)).filter(Boolean),
         ]);
-        const profiles = ["codex", "claude", "grok", "deepseek", "opencode", "gemini"]
+        const profiles = [...new Set([
+          "codex", "claude", "grok", "deepseek", "opencode", "gemini", ...configuredProfiles,
+        ])]
           .filter((profile) => discoveredProfiles.has(profile));
         if (profiles.length === 0) profiles.push(defaultProfile);
         const startedAt = row.execution_started_at ?? row.created_at;

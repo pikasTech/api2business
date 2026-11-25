@@ -282,7 +282,7 @@ func ensureSchedules(c client.Client, cfg Config, replaceRunning bool) error {
 	}
 	for _, scope := range cfg.V2PriorityAutomationScopes {
 		workflowID := v2PriorityAutomationWorkflowID(base, scope)
-		if err := startWorkflow(c, scheduleOptions(workflowID, cfg.TaskQueue), "upstreamSchedulingV2PriorityAutomationScheduleWorkflow", ScheduleInput{
+		if err := startWorkflow(c, cadenceScheduleOptions(workflowID, cfg.TaskQueue, replaceRunning), "upstreamSchedulingV2PriorityAutomationScheduleWorkflow", ScheduleInput{
 			IntervalMS:                  cfg.V2AutomationIntervalSeconds * 1000,
 			ActivityStartToCloseTimeout: cfg.ActivityTimeout,
 			MaximumAttempts:             1,
