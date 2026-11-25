@@ -1750,13 +1750,16 @@ export class UpstreamManagementService {
     if (accountIds.length !== before.rows.length || new Set(accountIds).size !== accountIds.length) {
       throw new Error(`scheduling scope ${scopeName} returned invalid or duplicate account IDs`);
     }
-    const mutation = await this.runtime.setAccountConcurrency(
-      accountIds,
-      capacity,
-      this.config.operations.upstreamManagement.mutationTimeoutMs,
-    );
+    const changedCount = before.rows.filter((row) => Number(row.concurrency) !== capacity).length;
+    const mutation = changedCount === 0
+      ? null
+      : await this.runtime.setAccountConcurrency(
+        accountIds,
+        capacity,
+        this.config.operations.upstreamManagement.mutationTimeoutMs,
+      );
 
-    const after = await query("bypass-cache");
+    const after = mutation === null ? before : await query("bypass-cache");
     const afterIds = after.rows.map((row) => positiveInteger(row.id)).filter((id): id is number => id !== null);
     if (afterIds.join(",") !== accountIds.join(",")) {
       throw new Error(`scheduling scope ${scopeName} account membership changed during capacity update`);
@@ -1769,13 +1772,13 @@ export class UpstreamManagementService {
     return {
       ok: true,
       action: "upstream-scope-capacity",
-      mutation: true,
+      mutation: mutation !== null,
       scope: scopeName,
       platform: scope.platform,
       groupIds: scope.eligibleGroupIds,
       capacity,
       accountCount: accountIds.length,
-      changedCount: before.rows.filter((row) => Number(row.concurrency) !== capacity).length,
+      changedCount,
       accountIds,
       mutationResult: mutation,
       verifiedCount: after.rows.length,
