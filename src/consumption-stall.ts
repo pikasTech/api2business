@@ -159,7 +159,9 @@ WITH probe_keys AS (
   JOIN probe_accounts p ON p.api_key_id=w.api_key_id
   GROUP BY p.account_id
 ), real_usage AS (
-  SELECT u.account_id, u.group_id, u.created_at, u.actual_cost,
+  -- Keep provider cost NULL when total_cost is unavailable. Coalescing it to
+  -- zero would turn missing cost data into a false consumption-stall alert.
+  SELECT u.account_id, u.group_id, u.created_at, u.total_cost AS provider_cost,
     COALESCE(NULLIF(TRIM(u.requested_model),''),NULLIF(TRIM(u.model),''),NULLIF(TRIM(u.upstream_model),''),'unknown') AS model,
     CASE WHEN u.created_at >= $2::timestamptz THEN 'current' ELSE 'previous' END AS window_key
   FROM usage_logs u
@@ -173,10 +175,10 @@ WITH probe_keys AS (
   SELECT account_id,
     COUNT(*) FILTER (WHERE window_key='current')::int AS current_records,
     COUNT(*) FILTER (WHERE window_key='previous')::int AS previous_records,
-    SUM(actual_cost) FILTER (WHERE window_key='current' AND actual_cost>=0) AS current_cost_usd,
-    SUM(actual_cost) FILTER (WHERE window_key='previous' AND actual_cost>=0) AS previous_cost_usd,
-    COUNT(*) FILTER (WHERE window_key='current' AND actual_cost IS NOT NULL AND actual_cost>=0)::int AS current_cost_known_records,
-    COUNT(*) FILTER (WHERE window_key='previous' AND actual_cost IS NOT NULL AND actual_cost>=0)::int AS previous_cost_known_records,
+    SUM(provider_cost) FILTER (WHERE window_key='current' AND provider_cost>=0) AS current_cost_usd,
+    SUM(provider_cost) FILTER (WHERE window_key='previous' AND provider_cost>=0) AS previous_cost_usd,
+    COUNT(*) FILTER (WHERE window_key='current' AND provider_cost IS NOT NULL AND provider_cost>=0)::int AS current_cost_known_records,
+    COUNT(*) FILTER (WHERE window_key='previous' AND provider_cost IS NOT NULL AND provider_cost>=0)::int AS previous_cost_known_records,
     MAX(created_at) FILTER (WHERE window_key='current') AS current_last_used_at,
     MAX(created_at) FILTER (WHERE window_key='previous') AS previous_last_used_at
   FROM real_usage GROUP BY account_id
