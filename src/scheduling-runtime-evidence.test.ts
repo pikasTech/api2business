@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { collectSchedulingRuntime, projectSchedulingRuntime } from "./scheduling-runtime-evidence";
+import { collectSchedulingRuntime, parseSchedulingRuntimeQuery, projectSchedulingRuntime } from "./scheduling-runtime-evidence";
 
 test("runtime evidence projects only numeric operational fields, never credentials or arbitrary strings", () => {
   expect(projectSchedulingRuntime({ group: { "3": { current_in_use: 4, max_capacity: 16, waiting_in_queue: 2, credentials: { api_key: "SECRET" }, platform: "openai" } }, account: [{ account_id: 41, is_available: false, token: "SECRET", name: "private" }] })).toEqual({ group: { "3": { current_in_use: 4, max_capacity: 16, waiting_in_queue: 2 } }, account: [{ account_id: 41, is_available: false }] });
@@ -25,6 +25,10 @@ test("runtime evidence validates before making native calls", async () => {
   const client = { async request<T>(): Promise<T> { throw Error("called"); }, async getOpsAccountAvailability() { throw Error("called"); }, async getOpsConcurrency() { throw Error("called"); } };
   await expect(collectSchedulingRuntime(client, 0, "openai")).rejects.toThrow("positive group");
   await expect(collectSchedulingRuntime(client, 3, "wrong")).rejects.toThrow("positive group");
+  expect(parseSchedulingRuntimeQuery("193", "command_code")).toEqual({ groupId: 193, platform: "command_code" });
+  expect(parseSchedulingRuntimeQuery("191", "opencode_go")).toEqual({ groupId: 191, platform: "opencode_go" });
+  expect(() => parseSchedulingRuntimeQuery(null, "command_code")).toThrow("positive group ID");
+  expect(() => parseSchedulingRuntimeQuery("193", "commandcode")).toThrow("command_code");
 });
 
 test("runtime evidence accepts configured non-OpenAI key platforms", async () => {
