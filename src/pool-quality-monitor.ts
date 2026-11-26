@@ -175,7 +175,7 @@ WITH internal_probe_keys AS (
           OR LOWER(COALESCE(source.error_message, '')) LIKE '%input must be a list%'
           THEN 'client_request'
         WHEN source.message_text LIKE ANY (${nonScoreableBillingErrorPatternsSql})
-            AND NOT ${explicitUpstreamErrorSql("source")}) THEN 'customer-billing'
+          AND NOT ${explicitUpstreamErrorSql("source")} THEN 'customer-billing'
         WHEN source.message_text LIKE ANY (${modelRoutingPatternsSql}) THEN 'model_routing'
         WHEN ${attributedInternalUpstreamFailureSql("source")} THEN NULL
         WHEN LOWER(COALESCE(source.error_phase, '')) IN ('internal', 'client', 'business')
