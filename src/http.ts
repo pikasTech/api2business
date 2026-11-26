@@ -11,6 +11,7 @@ import type { AppCommand, OperationRequest } from "./contracts";
 import type { Sub2ApiReadClient } from "./sub2api-read-executor";
 import { isRecoverableDatabaseConnectionError } from "./database-connection";
 import type { Sub2ApiRuntimeService } from "./sub2api-runtime-service";
+import { parseSchedulingRuntimeQuery } from "./scheduling-runtime-evidence";
 import type { UpstreamSchedulingV2Service } from "./upstream-scheduling-v2";
 import { UpstreamSchedulingV2Error } from "./upstream-scheduling-v2";
 import { TemporalSubmissionError } from "./temporal-client";
@@ -794,10 +795,12 @@ export function createHandler(
       if (url.pathname === "/api/admin/scheduling-runtime" && request.method === "GET") {
         const group = url.searchParams.get("group");
         const platform = url.searchParams.get("platform");
-        if (!group || !/^\d+$/.test(group) || !Number.isSafeInteger(Number(group)) || Number(group) < 1 || !["openai", "anthropic", "grok", "deepseek", "gemini"].includes(platform ?? "")) {
-          return json({ ok: false, error: "requires positive group and platform openai|anthropic|grok|deepseek|gemini" }, 400);
+        try {
+          const query = parseSchedulingRuntimeQuery(group, platform);
+          return json(await runtime.schedulingRuntimeEvidence(query.groupId, query.platform));
+        } catch (error) {
+          return json({ ok: false, error: error instanceof Error ? error.message : String(error) }, 400);
         }
-        return json(await runtime.schedulingRuntimeEvidence(group, platform));
       }
       if (url.pathname === "/api/admin/gateway/service-policy" && request.method === "POST") {
         const input = await body(request);
