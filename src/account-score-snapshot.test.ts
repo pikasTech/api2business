@@ -239,3 +239,110 @@ test("rank refreshes the shared snapshot and both reads return the policy score"
   expect(latest.accounts[0]?.score).toBe(72.3);
   expect(latest.accounts[0]?.score).toBe(snapshot.accounts[0]?.score);
 });
+
+async function commandCodeSnapshot(commandPolicies: boolean) {
+  const genericPolicy = {
+    reliabilityWeight: 48,
+    failoverWeight: 10,
+    latencyWeight: 37,
+    baselineWeight: 5,
+    failureZeroScoreRate: 0.2,
+    failureBurstCallLimit: 100,
+    failoverZeroScoreRate: 0.2,
+    ttftFullScoreMs: 5_000,
+    ttftZeroScoreMs: 55_000,
+    ttftPriorScore: 25,
+  };
+  const commandPolicy = {
+    ...genericPolicy,
+    reliabilityWeight: 60,
+    failoverWeight: 15,
+    latencyWeight: 25,
+    baselineWeight: 0,
+  };
+  const genericPlan = { eligibleGroupIds: [193], procurementAdvice: { billingErrorPatterns: [] } };
+  const commandPlan = {
+    ...genericPlan,
+    platform: "command_code",
+    procurementAdvice: { billingErrorPatterns: ["commandcode policy marker"] },
+  };
+  const config = {
+    monitor: { recentCallLimit: 1000, recentCallOptions: [500, 1000], refreshIntervalMinutes: 5 },
+    sub2api: {
+      scorePolicy: genericPolicy,
+      grokScorePolicy: genericPolicy,
+      ...(commandPolicies ? { commandCodeScorePolicy: commandPolicy } : {}),
+      scoreSamplePolicy: { retentionHours: 8, decayBucketSize: 100, decayStep: 0.1, minimumWeight: 0.1 },
+      priorityPlan: genericPlan,
+      grokPriorityPlan: genericPlan,
+      ...(commandPolicies ? { commandCodePriorityPlan: commandPlan } : {}),
+    },
+  };
+  let stored: Record<string, unknown> | null = null;
+  const store = {
+    async getSnapshot() { return stored; },
+    async beginSnapshotRefresh() {},
+    async completeSnapshot(_key: string, _schema: string, payload: Record<string, unknown>) {
+      stored = { schema_version: "api-key-platform-ttft-v2", payload, refresh_started_at: null, last_error: null };
+    },
+    async failSnapshotRefresh() {},
+  } satisfies ScoreSnapshotStore;
+  const reads = {
+    async query() {
+      return {
+        rows: [{
+          account_id: 1583,
+          account_name: "commandcode01",
+          platform: "command_code",
+          account_type: "apikey",
+          status: "error",
+          schedulable: false,
+          error_message: "commandcode policy marker",
+          priority: 1,
+          group_ids: [193],
+          group_names: ["CommandCode"],
+          success_requests: 20,
+          failure_requests: 0,
+          attributed_requests: 20,
+          failover_requests: 0,
+          first_token_samples: 0,
+          selected_calls: 20,
+        }],
+        cached: false,
+        queueDurationMs: 1,
+        queryDurationMs: 2,
+        queryStartedAt: "2026-11-23T05:00:00.000Z",
+        queryCompletedAt: "2026-11-23T05:00:01.000Z",
+        deduplicated: true,
+      };
+    },
+  };
+  const service = new AccountScoreService(
+    config as never,
+    "/tmp/api2business-unused-commandcode-score-cache.json",
+    {} as never,
+    reads as never,
+    store,
+  );
+  return service.refresh(1000);
+}
+
+test("command_code projection uses its dedicated score and priority policies", async () => {
+  const snapshot = await commandCodeSnapshot(true);
+  expect(snapshot.accounts).toHaveLength(1);
+  expect(snapshot.accounts[0]).toMatchObject({
+    platform: "command_code",
+    score: 81.3,
+    availabilityReason: { code: "billing-depleted" },
+  });
+});
+
+test("command_code projection falls back for configurations without dedicated policies", async () => {
+  const snapshot = await commandCodeSnapshot(false);
+  expect(snapshot.accounts).toHaveLength(1);
+  expect(snapshot.accounts[0]).toMatchObject({
+    platform: "command_code",
+    score: 72.3,
+    availabilityReason: { code: "account-error" },
+  });
+});

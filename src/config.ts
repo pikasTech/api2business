@@ -251,6 +251,7 @@ export interface AppConfig {
     poolScorePolicy: ScorePolicy;
     grokScorePolicy: ScorePolicy;
     deepseekScorePolicy: ScorePolicy;
+    commandCodeScorePolicy?: ScorePolicy;
     opencodeScorePolicy?: ScorePolicy;
     geminiScorePolicy?: ScorePolicy;
     scoreSamplePolicy: {
@@ -288,6 +289,7 @@ export interface AppConfig {
     claudePriorityPlan: PriorityPlanPolicy;
     opencodePriorityPlan?: PriorityPlanPolicy;
     geminiPriorityPlan?: PriorityPlanPolicy;
+    commandCodePriorityPlan?: PriorityPlanPolicy;
     adminCredentials: { sourceRef: string; emailKey: string; passwordKey: string };
   };
   lottery: {
@@ -1164,6 +1166,9 @@ export function loadConfig(path: string): AppConfig {
       ...(sub2api.geminiScorePolicy === undefined
         ? {}
         : { geminiScorePolicy: readScorePolicy(sub2api.geminiScorePolicy, "sub2api.geminiScorePolicy") }),
+      ...(sub2api.commandCodeScorePolicy === undefined
+        ? {}
+        : { commandCodeScorePolicy: readScorePolicy(sub2api.commandCodeScorePolicy, "sub2api.commandCodeScorePolicy") }),
       scoreSamplePolicy: {
         retentionHours: integerValue(scoreSamplePolicy, "retentionHours", "sub2api.scoreSamplePolicy", 1, 168),
         decayBucketSize: integerValue(scoreSamplePolicy, "decayBucketSize", "sub2api.scoreSamplePolicy", 1, 1000),
@@ -1239,6 +1244,9 @@ export function loadConfig(path: string): AppConfig {
       ...(sub2api.geminiPriorityPlan === undefined
         ? {}
         : { geminiPriorityPlan: readPriorityPlanPolicy(sub2api.geminiPriorityPlan, "sub2api.geminiPriorityPlan") }),
+      ...(sub2api.commandCodePriorityPlan === undefined
+        ? {}
+        : { commandCodePriorityPlan: readPriorityPlanPolicy(sub2api.commandCodePriorityPlan, "sub2api.commandCodePriorityPlan") }),
       adminCredentials: {
         sourceRef: stringValue(adminCredentials, "sourceRef", "sub2api.adminCredentials"),
         emailKey: stringValue(adminCredentials, "emailKey", "sub2api.adminCredentials"),

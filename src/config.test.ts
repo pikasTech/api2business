@@ -98,6 +98,13 @@ describe("upstream scheduling v2 platform validation", () => {
     expect(config.sub2api.idleProbe.platformModels?.command_code?.slice(0, 3)).toEqual([
       "deepseek/deepseek-v4.1-flash", "gpt-6.1-sol", "gpt-6-sol",
     ]);
+    expect(config.sub2api.commandCodeScorePolicy?.reliabilityWeight).toBe(60);
+    expect(config.sub2api.commandCodePriorityPlan).toMatchObject({
+      platform: "command_code",
+      eligibleGroupIds: [193],
+      reliabilityWeight: 65,
+      latencyWeight: 35,
+    });
   });
 
   test("validates idleProbeCacheMode values", () => {
