@@ -19,6 +19,7 @@ rules:
 - errorCode: 503
   keywords:
   - "Upstream request failed: Endpoint is unavailable."
+  - "Service temporarily unavailable"
   durationMinutes: 3
   description: OpenCode Go 上游端点明确不可用时短暂切号
 - errorCode: 403
