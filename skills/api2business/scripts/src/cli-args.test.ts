@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { assertErrorsQueryBounds, assertObservationWindow, assertSchedulingRuntimeQuery, normalizeCliArgs, parseArgs, poolQualityScope, priorityHistoryDiagnostics, selectPriorityHistory, summarizeWorkflowStatus } from "./cli";
-import { operationHelp, priorityHistoryHelp, upstreamsUsageHelp } from "./operation-help";
+import { operationHelp, priorityHistoryHelp, upstreamsUsageHelp, upstreamWriteHelp } from "./operation-help";
 import { webProbeElementArgs } from "./web-screenshot";
 
 test("historical balance CLI accepts signed USD without consuming the next option", () => {
@@ -186,4 +186,28 @@ test("upstreams model-alias help stays operation-scoped", () => {
   const help = operationHelp(["upstreams", "model-alias", "--help"]);
   expect(help).toMatchObject({ ok: true, command: "upstreams model-alias" });
   expect(JSON.stringify(help)).toContain("--upstream-model");
+});
+
+test("upstream write and status help keep full operation contracts", () => {
+  const recover = operationHelp(["upstreams", "recover", "--help"]);
+  expect(recover).toMatchObject({ ok: true, command: "upstreams recover" });
+  expect(String(recover?.usage)).toContain("upstreams recover --accounts");
+  expect(String(recover?.behavior)).toContain("mutation=false");
+  expect(String(recover?.verification)).toContain("upstreams status");
+
+  const status = operationHelp(["upstreams", "status", "--help"]);
+  expect(status).toMatchObject({ ok: true, command: "upstreams status" });
+  expect(String(status?.usage)).toContain("upstreams status --id");
+  expect(String(status?.behavior)).toContain("只读");
+
+  const update = operationHelp(["upstreams", "update", "--help"]);
+  expect(update).toMatchObject({ ok: true, command: "upstreams update" });
+  expect(String(update?.usage)).toContain("--template-only");
+  expect(String(update?.verification)).toContain("credentials.base_url");
+
+  const modelsSync = operationHelp(["upstreams", "models", "sync", "--help"]);
+  expect(modelsSync).toMatchObject({ ok: true, command: "upstreams models sync" });
+  expect(String(modelsSync?.usage)).toContain("upstreams models sync --accounts");
+  expect(String(modelsSync?.verification)).toContain("不生成 workflow");
+  expect(modelsSync).toEqual(upstreamWriteHelp("models sync"));
 });
