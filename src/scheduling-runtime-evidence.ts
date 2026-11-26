@@ -10,8 +10,10 @@ export function parseSchedulingRuntimeQuery(group: unknown, platform: unknown): 
   groupId: number;
   platform: SchedulingRuntimePlatform;
 } {
-  const groupId = Number(group);
-  if (!Number.isSafeInteger(groupId) || groupId < 1
+  const validGroup = (typeof group === "number" && Number.isSafeInteger(group) && group > 0)
+    || (typeof group === "string" && /^\d+$/u.test(group) && Number.isSafeInteger(Number(group)) && Number(group) > 0);
+  const groupId = validGroup ? Number(group) : Number.NaN;
+  if (!validGroup
     || !schedulingRuntimePlatforms.includes(String(platform) as SchedulingRuntimePlatform)) {
     throw new Error(`runtime evidence requires a positive group ID and platform ${schedulingRuntimePlatforms.join("|")}`);
   }

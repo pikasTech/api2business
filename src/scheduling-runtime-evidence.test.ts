@@ -27,6 +27,18 @@ test("runtime evidence validates before making native calls", async () => {
   await expect(collectSchedulingRuntime(client, 3, "wrong")).rejects.toThrow("positive group");
   expect(parseSchedulingRuntimeQuery("193", "command_code")).toEqual({ groupId: 193, platform: "command_code" });
   expect(parseSchedulingRuntimeQuery("191", "opencode_go")).toEqual({ groupId: 191, platform: "opencode_go" });
+  expect(parseSchedulingRuntimeQuery("0193", "openai")).toEqual({ groupId: 193, platform: "openai" });
+  expect(parseSchedulingRuntimeQuery(193, "command_code")).toEqual({ groupId: 193, platform: "command_code" });
+  expect(parseSchedulingRuntimeQuery(String(Number.MAX_SAFE_INTEGER), "openai")).toEqual({
+    groupId: Number.MAX_SAFE_INTEGER,
+    platform: "openai",
+  });
+  for (const invalidGroup of [
+    null, undefined, "", " ", " 193", "193 ", "+193", "-193", "1e3", "0x10", "193.0",
+    "0", "00", String(Number.MAX_SAFE_INTEGER + 1), Number.MAX_SAFE_INTEGER + 1,
+  ]) {
+    expect(() => parseSchedulingRuntimeQuery(invalidGroup, "openai")).toThrow("positive group ID");
+  }
   expect(() => parseSchedulingRuntimeQuery(null, "command_code")).toThrow("positive group ID");
   expect(() => parseSchedulingRuntimeQuery("193", "commandcode")).toThrow("command_code");
 });
