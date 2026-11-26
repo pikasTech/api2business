@@ -147,8 +147,7 @@ function customerErrorAttribution(row: Sub2ApiRequestError): { scoreable: boolea
   const explicitUpstream = row.account_id != null
     && String(row.phase ?? "").toLowerCase() === "upstream"
     && Number(row.upstream_status_code ?? 0) >= 400;
-  if (row.is_business_limited === true
-    || (nonScoreableBillingErrorPatterns.some((marker) => message.includes(marker)) && !explicitUpstream)) {
+  if (nonScoreableBillingErrorPatterns.some((marker) => message.includes(marker)) && !explicitUpstream) {
     return { scoreable: false, reason: "customer-billing" };
   }
   if (message.includes("context window") || message.includes("context_length_exceeded")) return { scoreable: false, reason: "context-window" };

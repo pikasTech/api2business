@@ -231,7 +231,7 @@ test("pool quality excludes every monitor-user key without changing account scor
   expect(poolQualitySql).toContain("o.group_id = ANY(string_to_array($2, ',')::bigint[])");
   expect(poolQualitySql).toContain("'%insufficient_balance%'");
   expect(poolQualitySql).toContain("'%balance is insufficient%'");
-  expect(poolQualitySql).toContain("COALESCE(source.business_limited, false)");
+  expect(poolQualitySql).not.toContain("COALESCE(source.business_limited, false)");
   expect(poolQualitySql).toContain("'customer-billing'");
   expect(poolQualitySql).toContain("CASE WHEN scoreable THEN NULL::text ELSE exclusion_reason END AS exclusion_reason");
   expect(poolQualitySql.match(/AND NOT \(source.account_id IS NOT NULL/gu)?.length).toBe(2);

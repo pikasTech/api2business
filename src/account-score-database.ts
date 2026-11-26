@@ -66,7 +66,6 @@ WITH bounded_probe_facts AS MATERIALIZED (
   SELECT probe.account_id, probe.request_key, probe.completed_at,
     CASE
       WHEN o.id IS NULL THEN COALESCE(probe.error_marker, '') <> 'no-available-account'
-      WHEN COALESCE(o.is_business_limited, false) THEN false
       WHEN LOWER(CONCAT_WS(' ', o.error_message, o.error_body,
         o.upstream_error_message, o.upstream_error_detail)) LIKE ANY (${nonScoreableBillingErrorPatternsSql})
         AND NOT ${explicitUpstreamErrorSql("o")} THEN false
@@ -274,7 +273,6 @@ account_stats AS (
             WHEN LOWER(COALESCE(o.error_message, '')) LIKE '%context window%'
               OR LOWER(COALESCE(o.error_message, '')) LIKE '%context_length_exceeded%' THEN false
             WHEN LOWER(COALESCE(o.error_message, '')) LIKE '%input must be a list%' THEN false
-            WHEN COALESCE(o.is_business_limited, false) THEN false
             WHEN LOWER(CONCAT_WS(' ', o.error_message, o.error_body,
               o.upstream_error_message, o.upstream_error_detail)) LIKE ANY (${nonScoreableBillingErrorPatternsSql})
               AND NOT ${explicitUpstreamErrorSql("o")} THEN false

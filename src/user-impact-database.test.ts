@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { maskIdentity, parseImpactWindow, userImpactQuery } from "./user-impact-database";
+import { customerBillingLimitSql } from "./scoring-error-policy";
 
 test("parses offset-free impact windows in the owning timezone", () => {
   const window = parseImpactWindow("2026-07-23T16:00:00", "2026-07-23T17:00:00", "Asia/Shanghai");
@@ -18,8 +19,9 @@ test("uses one bounded database aggregation and excludes recovered requests", ()
   expect(userImpactQuery).toContain("created_at >= $1::timestamptz");
   expect(userImpactQuery).toContain("created_at < $2::timestamptz");
   expect(userImpactQuery).toContain("infrastructure_failure IS TRUE AND success_key IS NULL");
-  expect(userImpactQuery).toContain("NOT IN ('client', 'business')");
-  expect(userImpactQuery).toContain("COALESCE(is_business_limited, false) IS FALSE");
+  expect(userImpactQuery).toContain("LOWER(COALESCE(error_phase, '')) <> 'client'");
+  expect(userImpactQuery).toContain(customerBillingLimitSql("ops_error_logs"));
+  expect(userImpactQuery).toContain("%api_key_quota_exhausted%");
   expect(userImpactQuery).toContain("LOWER(COALESCE(u.role, '')) <> 'admin'");
   expect(userImpactQuery).toContain("u.email <> 'monitor-user@sub2api.platform-infra.local'");
   expect(userImpactQuery).toContain("u.email NOT LIKE 'api2business-probe-%@sub2api.platform-infra.local'");

@@ -138,7 +138,7 @@ describe("aggregateNativeGroupScore", () => {
       ["upstream", 403, 15, false, 1],
       ["request", 403, 15, false, 0],
       ["upstream", undefined, 15, false, 0],
-      ["upstream", 403, 15, true, 0],
+      ["upstream", 403, 15, true, 1],
     ] as const) {
       const result = aggregateNativeGroupScore({
         group: { id: 2, name: "pool", platform: "openai", status: "active" },
@@ -151,6 +151,33 @@ describe("aggregateNativeGroupScore", () => {
       });
       expect(result.accounts[0]!.scoreableUpstreamErrorRequests).toBe(failures);
     }
+  });
+
+  test("does not treat a routing failure flag as customer billing without billing evidence", () => {
+    const result = aggregateNativeGroupScore({
+      group: { id: 2, name: "pool", platform: "openai", status: "active" },
+      accounts: [{ id: 15, name: "primary", platform: "openai", status: "active", schedulable: true, priority: 1 }],
+      usage: [],
+      requestErrors: [{
+        id: 1,
+        request_id: "select-failed",
+        account_id: 15,
+        status_code: 503,
+        phase: "routing",
+        type: "api_error",
+        is_business_limited: true,
+        error_message: "openai.account_select_failed",
+      }],
+      systemLogs: [],
+      overview: {},
+      availability: availableOps,
+      concurrency: availableOps,
+    });
+    expect(result.accounts[0]).toMatchObject({
+      scoreableUpstreamErrorRequests: 0,
+      excludedNonUpstreamErrorRequests: 1,
+      excludedReasonBuckets: [{ reason: "unattributed-customer-error", count: 1 }],
+    });
   });
 
   test("excludes luna usage, request errors, and system events from scoring", () => {

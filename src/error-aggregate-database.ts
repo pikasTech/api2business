@@ -3,6 +3,7 @@ import type {
   Sub2ApiReadClient,
   Sub2ApiReadPriority,
 } from "./sub2api-read-executor";
+import { customerBillingLimitSql } from "./scoring-error-policy";
 
 type Row = Record<string, unknown>;
 
@@ -33,6 +34,9 @@ selected_errors AS MATERIALIZED (
     o.error_phase,
     o.error_type,
     o.error_message,
+    o.error_body,
+    o.upstream_error_message,
+    o.upstream_error_detail,
     o.network_error_type,
     o.is_business_limited,
     o.stream,
@@ -101,8 +105,7 @@ classified_errors AS (
         AND LOWER(COALESCE(e.error_phase, '')) = 'routing'
         AND COALESCE(e.upstream_status_code, 0) IN (401, 403)
         THEN 'upstream_permission'
-      WHEN COALESCE(e.is_business_limited, false)
-        OR LOWER(COALESCE(e.error_phase, '')) = 'business' THEN 'business_limit'
+      WHEN ${customerBillingLimitSql("e")} THEN 'business_limit'
       WHEN LOWER(COALESCE(e.error_phase, '')) = 'client'
         OR (e.status_code = 400
           AND LOWER(COALESCE(e.error_phase, '')) <> 'upstream'

@@ -45,6 +45,8 @@ export const nonScoreableBillingErrorPatterns = [
   "账户余额不足",
   "账号余额不足",
   "预扣费额度失败",
+  "api_key_quota_exhausted",
+  "api key 额度已用完",
 ];
 
 function sqlLiteral(value: string): string {
@@ -57,8 +59,23 @@ export const stableUpstreamErrorPatternsSql = `ARRAY[${stableUpstreamErrorPatter
 
 export const nonScoreableBillingErrorPatternsSql = `ARRAY[${nonScoreableBillingErrorPatterns.map((pattern) => sqlLiteral(`%${pattern}%`)).join(", ")}]`;
 
+// Sub2API's is_business_limited flag also appears on routing failures such as
+// account_select_failed. Treat the flag as customer billing only when the same
+// row contains explicit user balance or downstream API-key quota evidence.
+export function customerBillingLimitSql(alias: string): string {
+  if (!/^[a-z][a-z0-9_]*$/u.test(alias)) throw new Error("invalid customer billing SQL alias");
+  return `((
+    COALESCE(${alias}.is_business_limited, false)
+    OR LOWER(COALESCE(${alias}.error_phase, '')) = 'business'
+  ) AND LOWER(CONCAT_WS(' ', ${alias}.error_message, ${alias}.error_body,
+    ${alias}.upstream_error_message, ${alias}.upstream_error_detail))
+    LIKE ANY (${nonScoreableBillingErrorPatternsSql})
+    AND NOT ${explicitUpstreamErrorSql(alias)})`;
+}
+
 // 同一余额短语可能来自客户账户或已选上游。明确的上游状态不能被关键词误排除。
-export function explicitUpstreamErrorSql(alias: "o" | "source"): string {
+export function explicitUpstreamErrorSql(alias: string): string {
+  if (!/^[a-z][a-z0-9_]*$/u.test(alias)) throw new Error("invalid upstream policy SQL alias");
   return `(${alias}.account_id IS NOT NULL
     AND LOWER(COALESCE(${alias}.error_phase, '')) = 'upstream'
     AND COALESCE(${alias}.upstream_status_code, 0) >= 400)`;

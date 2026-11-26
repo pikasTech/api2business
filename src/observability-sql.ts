@@ -1,4 +1,4 @@
-import { audioRequestSql } from "./scoring-error-policy";
+import { audioRequestSql, customerBillingLimitSql } from "./scoring-error-policy";
 
 // Keep only changes in the evidenced rate. Repeated quota samples are not new
 // billing epochs; scanning all of them for every usage row makes week-long reads slow.
@@ -76,19 +76,14 @@ errors AS (
 ), customer_billing AS (
   SELECT DISTINCT ON (e.request_id) e.* FROM errors e
   WHERE e.api_user_id IS NOT NULL AND NULLIF(TRIM(e.request_id),'') IS NOT NULL
-    AND (COALESCE(e.is_business_limited,false) OR e.error_phase='business')
-    AND LOWER(CONCAT_WS(' ',e.error_message,e.error_body,e.upstream_error_message,e.upstream_error_detail)) LIKE ANY (ARRAY[
-      '%insufficient_balance%','%insufficient account balance%','%balance is insufficient%',
-      '%user balance is insufficient%','%余额不足%','%额度不足%',
-      '%api_key_quota_exhausted%','%api key 额度已用完%'
-    ])
+    AND ${customerBillingLimitSql("e")}
   ORDER BY e.request_id,e.created_at DESC,e.id DESC
 ), failure AS (
   SELECT DISTINCT ON (e.request_id) e.request_id,e.account_id,e.error_phase,e.error_type,
     e.status_code,e.upstream_status_code,e.network_error_type,e.model,e.requested_model,e.upstream_model,
     e.inbound_endpoint,e.api_user_id,e.api_key_id,e.api_key_name,e.api_user_email,e.created_at,
     CASE
-      WHEN COALESCE(e.is_business_limited,false) OR e.error_phase='business' THEN 'business_limit'
+      WHEN ${customerBillingLimitSql("e")} THEN 'business_limit'
       WHEN e.error_phase='client' THEN 'client_input'
       WHEN e.status_code=429 OR e.upstream_status_code=429 THEN 'rate_limit'
       WHEN e.status_code IN (502,503,504,524) OR e.upstream_status_code IN (502,503,504,524) THEN 'gateway_unavailable'

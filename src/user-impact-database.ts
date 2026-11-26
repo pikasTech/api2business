@@ -4,6 +4,7 @@ import type {
   Sub2ApiReadClient,
   Sub2ApiReadPriority,
 } from "./sub2api-read-executor";
+import { customerBillingLimitSql } from "./scoring-error-policy";
 
 type Row = Record<string, unknown>;
 
@@ -31,8 +32,8 @@ error_requests AS (
     MIN(created_at) AS first_at,
     MAX(created_at) AS last_at,
     BOOL_OR(
-      COALESCE(is_business_limited, false) IS FALSE
-      AND LOWER(COALESCE(error_phase, '')) NOT IN ('client', 'business')
+      NOT ${customerBillingLimitSql("ops_error_logs")}
+      AND LOWER(COALESCE(error_phase, '')) <> 'client'
       AND (
         COALESCE(status_code, 0) >= 500
         OR COALESCE(upstream_status_code, 0) >= 500

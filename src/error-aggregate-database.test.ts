@@ -33,7 +33,8 @@ test("error aggregate is one bounded database query with recovered request detec
   expect(errorAggregateQuery).toContain("AND ($7::text IS NULL OR LOWER(COALESCE(o.requested_model, o.model, 'unknown')) = LOWER($7::text))");
   expect(errorAggregateQuery).toContain('terminal.request_id = e.request_id');
   expect(errorAggregateQuery).not.toContain("OR u.request_id IN");
-  expect(errorAggregateQuery).not.toContain("error_body");
+  expect(errorAggregateQuery).toContain("%api_key_quota_exhausted%");
+  expect(errorAggregateQuery).toContain("COALESCE(e.is_business_limited, false)");
   expect(errorAggregateQuery).not.toContain("api_key_prefix");
 });
 

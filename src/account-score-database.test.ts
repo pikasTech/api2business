@@ -70,7 +70,7 @@ test("database aggregate uses bounded account indexes and current state is displ
   expect(recentAccountAggregateQuery).toContain("AS failover_failed");
   expect(recentAccountAggregateQuery).toContain("%insufficient_balance%");
   expect(recentAccountAggregateQuery).toContain("%insufficient account balance%");
-  expect(recentAccountAggregateQuery).toContain("COALESCE(o.is_business_limited, false)");
+  expect(recentAccountAggregateQuery).not.toContain("WHEN COALESCE(o.is_business_limited, false) THEN false");
   expect(recentAccountAggregateQuery).toContain("AND NOT (o.account_id IS NOT NULL");
   expect(recentAccountAggregateQuery).toContain("AND LOWER(COALESCE(o.error_phase, '')) = 'upstream'");
   expect(recentAccountAggregateQuery).toContain("AND COALESCE(o.upstream_status_code, 0) >= 400)");
