@@ -27,6 +27,22 @@ test("runtime evidence validates before making native calls", async () => {
   await expect(collectSchedulingRuntime(client, 3, "wrong")).rejects.toThrow("positive group");
 });
 
+test("runtime evidence accepts configured non-OpenAI key platforms", async () => {
+  const calls: string[] = [];
+  const client = {
+    async request<T>() { return { version: "v0.2.17" } as T; },
+    async getOpsAccountAvailability(group: number, platform: string) { calls.push(`${group}:${platform}`); return { account: [{ account_id: 1583, is_available: true }] }; },
+    async getOpsConcurrency() { return { current_in_use: 0, max_capacity: 10 }; },
+  };
+  await expect(collectSchedulingRuntime(client, 193, "command_code")).resolves.toMatchObject({
+    groupId: 193,
+    platform: "command_code",
+    complete: true,
+  });
+  await expect(collectSchedulingRuntime(client, 191, "opencode_go")).resolves.toMatchObject({ complete: true });
+  expect(calls).toEqual(["193:command_code", "191:opencode_go"]);
+});
+
 test("native version failure does not discard live capacity evidence", async () => {
   const result = await collectSchedulingRuntime({
     async request<T>() { return { version: "private secret string" } as T; },

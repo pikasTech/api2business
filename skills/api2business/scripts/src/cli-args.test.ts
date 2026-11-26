@@ -161,6 +161,8 @@ test("pool quality reads the requested scope and runtime evidence accepts deepse
   expect(() => poolQualityScope("codex", "claude")).toThrow("same scope");
   expect(assertSchedulingRuntimeQuery("131", "deepseek")).toEqual({ group: "131", platform: "deepseek" });
   expect(assertSchedulingRuntimeQuery("665", "gemini")).toEqual({ group: "665", platform: "gemini" });
+  expect(assertSchedulingRuntimeQuery("191", "opencode_go")).toEqual({ group: "191", platform: "opencode_go" });
+  expect(assertSchedulingRuntimeQuery("193", "command_code")).toEqual({ group: "193", platform: "command_code" });
   expect(() => assertSchedulingRuntimeQuery("131", "codex")).toThrow("deepseek");
 });
 
