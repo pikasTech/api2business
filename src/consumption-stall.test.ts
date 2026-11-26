@@ -93,6 +93,27 @@ test("新鲜余额、可调度、两窗有需求且两窗零消耗形成稳定�
   expect(evaluate([account()], [wallet()]).alerts[0]?.alertId).toBe(result.alerts[0]?.alertId);
 });
 
+test("客户账务与供应商标准成本分开使用，真实供应商零成本仍形成强告警", () => {
+  const providerZero = account({ currentRecords: 3, previousRecords: 3,
+    currentCostUsd: 0, previousCostUsd: 0,
+    currentCostKnownRecords: 3, previousCostKnownRecords: 3 });
+  const result = evaluate([providerZero], [wallet()]);
+  expect(result.records[0]).toMatchObject({
+    classification: "consumption-stalled",
+    reasonCodes: ["zero-consumption-both-windows"],
+    current: { costUsd: 0 },
+    previous: { costUsd: 0 },
+  });
+  const incomplete = evaluate([account({ currentRecords: 3, previousRecords: 3,
+    currentCostUsd: null, previousCostUsd: null,
+    currentCostKnownRecords: 0, previousCostKnownRecords: 0 })], [wallet()]);
+  expect(incomplete.records[0]).toMatchObject({
+    classification: "watch",
+    reasonCodes: ["cost-incomplete"],
+  });
+  expect(incomplete.summary.consumptionStalled).toBe(0);
+});
+
 test("同一钱包和平台的多个停滞账号聚合为一条告警", () => {
   const result = evaluate([account(), account({ accountId: 39 })], [wallet({ accountIds: [37, 39] })]);
   expect(result.summary.alerts).toBe(1);
@@ -128,6 +149,10 @@ test("降幅阈值按边界生效，平台总流量同等下降不触发", () =>
 });
 
 test("停滞查询显式排除探活与语音，并只读取当前和上一窗口", () => {
+  expect(consumptionStallSql).toContain("u.total_cost AS provider_cost");
+  expect(consumptionStallSql).not.toContain("COALESCE(u.total_cost, 0) AS provider_cost");
+  expect(consumptionStallSql).toContain("SUM(provider_cost)");
+  expect(consumptionStallSql).not.toContain("SUM(actual_cost)");
   expect(consumptionStallSql).toContain("api2business-probe-%");
   expect(consumptionStallSql).toContain("NOT (");
   expect(consumptionStallSql).toContain("u.created_at >= $1::timestamptz");
