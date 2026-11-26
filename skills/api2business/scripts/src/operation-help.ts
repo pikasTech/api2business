@@ -75,6 +75,68 @@ export function upstreamsUsageHelp(): Record<string, unknown> {
   };
 }
 
+type UpstreamWriteAction = "recover" | "status" | "update" | "models sync";
+
+export function upstreamWriteHelp(action: UpstreamWriteAction): Record<string, unknown> {
+  const common = {
+    ok: true,
+    command: `upstreams ${action}`,
+    options: {
+      "--config": configOption,
+      "--over-api": overApiOption,
+      "--json": jsonOption,
+    },
+  };
+  if (action === "recover") return {
+    ...common,
+    usage: `${entry} --config <owning-YAML> upstreams recover --accounts <id-or-range,...> [--confirm] --over-api <absolute-http(s)-URL> [--json]`,
+    options: {
+      ...common.options,
+      "--accounts": "必填；正整数账号 ID，可用逗号列表或闭区间范围；执行前去重并排序",
+      "--confirm": "写入确认；省略时只返回账号 IDs 和 mutation=false",
+    },
+    behavior: "默认只读预览并返回 mutation=false；--confirm 提交异步恢复作业，将目标账号设为 active 且 schedulable=true。不会充值、切号、改分组、改模板或删除账号。",
+    verification: "先用 upstreams status --id <workflow-id> 和同一绝对 URL 追到终态，再原生回读每个账号的 status、schedulable、额度与上游可用性；recovered 计数不证明上游已恢复供给。",
+  };
+  if (action === "status") return {
+    ...common,
+    usage: `${entry} --config <owning-YAML> upstreams status --id <workflow-id> --over-api <absolute-http(s)-URL> [--json]`,
+    options: {
+      ...common.options,
+      "--id": "必填；异步 upstream 作业返回的 workflow ID",
+    },
+    behavior: "只读查询原 workflow，不提交新作业、不恢复账号、不修改调度；省略 --json 时只显示有界终态摘要。",
+    verification: "核对 state、terminal、result.ok、result.status 和各类计数；还在运行时继续查询同一 workflow，不用重新提交或账号成功状态替代。",
+  };
+  if (action === "update") return {
+    ...common,
+    usage: `${entry} --config <owning-YAML> upstreams update --id <account-id> [--base-url <https-url>] [--groups <id,id,...>] [--suffix <name>] [--rate <CNY/API_USD>] [--template-only] [--confirm] --over-api <absolute-http(s)-URL> [--json]`,
+    options: {
+      ...common.options,
+      "--id": "必填；正整数 Sub2API API-key 上游账号 ID",
+      "--base-url": "可选；HTTPS 供应商 origin。Anthropic 不写 /v1，只合并 credentials.base_url",
+      "--groups": "可选；分组 ID 整表替换，并同步重写该平台切号模板；探活私有分组不得遗漏",
+      "--suffix": "可选；与费率共同生成账号名，不单独重置 API key 或模型映射",
+      "--rate": "可选；CNY/API_USD 费率；与 suffix 共同生成账号名",
+      "--template-only": "可选；仅按当前平台和地址重新应用切号模板，不替换其他凭据",
+      "--confirm": "写入确认；省略时只返回 mutation=false 的计划",
+    },
+    behavior: "默认只读预览；--confirm 提交异步单账号更新。只合并指定字段并重写切号模板，不充值、不恢复、不删除账号，也不替换 API key 或模型映射。",
+    verification: "先用 upstreams status --id <workflow-id> 和同一绝对 URL 追到终态，再原生回读账号名、credentials.base_url、group_ids、切号模板及未改凭据；页面请求成功不等于持久化正确。",
+  };
+  return {
+    ...common,
+    usage: `${entry} --config <owning-YAML> upstreams models sync --accounts <id-or-range,...> --confirm --over-api <absolute-http(s)-URL> [--json]`,
+    options: {
+      ...common.options,
+      "--accounts": "必填；正整数账号 ID，可用逗号列表或闭区间范围；批量按 ID 顺序处理",
+      "--confirm": "写入确认；省略时只返回 mutation=false 的账号列表",
+    },
+    behavior: "默认只读预览；--confirm 直接执行原生模型发现和 mapping bulk merge。保留非映射凭据，不写 model_mapping 以外的账号字段；多账号遇到单账号失败会继续其余账号并以 failures 返回部分成功。",
+    verification: "逐账号核对 result 中 persisted=true、persistedModelCount、changedModelCount、mappingAfter，并确认 failures 为空、非映射凭据未变；该命令是同步执行，不生成 workflow，不能改用 upstreams status 等待。",
+  };
+}
+
 export function quotaMonitorSampleHelp(): Record<string, unknown> {
   return {
     ok: true,
@@ -254,6 +316,11 @@ export function operationHelp(args: string[]): Record<string, unknown> | null {
   }
   const scores = position("scores", "rank");
   if (scores >= 0) return scoreRankHelp();
+  const modelsSync = position("upstreams", "models");
+  if (modelsSync >= 0 && args[modelsSync + 2] === "sync") return upstreamWriteHelp("models sync");
+  for (const action of ["recover", "status", "update"] as const) {
+    if (position("upstreams", action) >= 0) return upstreamWriteHelp(action);
+  }
   const modelAlias = position("upstreams", "model-alias");
   if (modelAlias >= 0) return modelAliasHelp();
   return null;
