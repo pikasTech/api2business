@@ -722,6 +722,8 @@ export async function collectRecentCallScoresFromDatabase(
           ? (config.sub2api.geminiScorePolicy ?? config.sub2api.scorePolicy)
         : platform === "opencode_go"
           ? (config.sub2api.opencodeScorePolicy ?? config.sub2api.poolScorePolicy ?? config.sub2api.scorePolicy)
+        : platform === "command_code"
+          ? (config.sub2api.commandCodeScorePolicy ?? config.sub2api.scorePolicy)
           : config.sub2api.scorePolicy;
     const priorityPlanFor = (platform: string) => platform === "grok"
       ? config.sub2api.grokPriorityPlan
@@ -731,6 +733,8 @@ export async function collectRecentCallScoresFromDatabase(
           ? (config.sub2api.geminiPriorityPlan ?? config.sub2api.priorityPlan)
         : platform === "anthropic"
           ? (config.sub2api.claudePriorityPlan ?? config.sub2api.priorityPlan)
+          : platform === "command_code"
+            ? (config.sub2api.commandCodePriorityPlan ?? config.sub2api.priorityPlan)
           : platform === "opencode_go"
             ? (config.sub2api.opencodePriorityPlan ?? config.sub2api.priorityPlan)
             : config.sub2api.priorityPlan;

@@ -242,8 +242,8 @@ export class AccountScoreService {
     return accounts.filter((row) => {
       if (isOAuthAccount(row)) return false;
       const platform = String(row.platform ?? "").trim().toLowerCase();
-      if (platform !== "openai" && platform !== "anthropic" && platform !== "grok" && platform !== "deepseek" && platform !== "opencode_go" && platform !== "gemini") return false;
-      if (platform === "anthropic" || platform === "grok" || platform === "deepseek" || platform === "opencode_go" || platform === "gemini") return true;
+      if (platform !== "openai" && platform !== "anthropic" && platform !== "grok" && platform !== "deepseek" && platform !== "opencode_go" && platform !== "command_code" && platform !== "gemini") return false;
+      if (platform === "anthropic" || platform === "grok" || platform === "deepseek" || platform === "opencode_go" || platform === "command_code" || platform === "gemini") return true;
       const eligibleGroupIds = new Set(this.config.sub2api.priorityPlan.eligibleGroupIds);
       for (const scope of Object.values(this.config.operations.upstreamSchedulingV2?.scopes ?? {})) {
         if (scope.enabled && scope.features.scoreRead && scope.platform === "openai") {
