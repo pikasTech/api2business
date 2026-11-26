@@ -135,7 +135,7 @@ function parseGroupIds(raw: string | null, command: string): number[] {
   return [...new Set(values)].sort((left, right) => left - right);
 }
 
-const schedulingPlatforms = ["openai", "anthropic", "grok", "deepseek", "gemini"] as const;
+const schedulingPlatforms = ["openai", "anthropic", "grok", "deepseek", "opencode_go", "command_code", "gemini"] as const;
 
 export function poolQualityScope(platform: string | null, scope: string | null): string {
   if (platform !== null && scope !== null && platform !== scope) {
@@ -152,7 +152,7 @@ export function assertSchedulingRuntimeQuery(group: string | null, platform: str
   const groupId = Number(group);
   if (!group || !/^\d+$/u.test(group) || !Number.isSafeInteger(groupId) || groupId < 1
     || !schedulingPlatforms.includes(platform as typeof schedulingPlatforms[number])) {
-    throw new Error("reads runtime requires --group <positive-id> --platform openai|anthropic|grok|deepseek|gemini");
+    throw new Error("reads runtime requires --group <positive-id> --platform openai|anthropic|grok|deepseek|opencode_go|command_code|gemini");
   }
   return { group, platform: platform! };
 }
@@ -340,7 +340,7 @@ function help(): Record<string, unknown> {
       "upstream-scheduling-v2 priority-run --scope <configured-scope> [--confirm] --over-api <absolute-http(s)-URL> (manual priority adjustment)",
       "upstream-scheduling-v2 model-sync plan|run|history [--scope <configured-scope>] [--accounts id,...] [--confirm] --over-api <absolute-http(s)-URL>",
       "reads status --over-api <absolute-http(s)-URL>",
-      "reads runtime --group <positive-id> --platform openai|anthropic|grok|deepseek|gemini --over-api <absolute-http(s)-URL> (read-only live availability/concurrency/native version)",
+      "reads runtime --group <positive-id> --platform openai|anthropic|grok|deepseek|opencode_go|command_code|gemini --over-api <absolute-http(s)-URL> (read-only live availability/concurrency/native version)",
       "observability report|costs|probe-costs|get|check|configure --help",
       "errors aggregate [--start ISO --end ISO] [--limit N] [--top N] [--account <id-or-name>] [--group <id-or-exact-name>] [--model <exact-id>]",
       "errors diagnose [--start ISO --end ISO] [--request-id <request-id>] [--model <exact-id>] [--limit N] [--top N] [--account <id-or-name>] [--group <id-or-exact-name>]",
