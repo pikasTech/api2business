@@ -691,6 +691,8 @@ test("keeps Codex and Claude templates as separate platform files", () => {
   expect(opencode.rules).toHaveLength(5);
   expect(opencode.rules.some((rule) => rule.error_code === 403 && rule.keywords.includes("Workspace access denied"))).toBe(true);
   expect(opencode.rules.some((rule) => rule.error_code === 429 && rule.keywords.includes("Go usage limit exceeded"))).toBe(true);
+  expect(opencode.rules.find((rule) => rule.error_code === 503)?.keywords)
+    .toContain("Service temporarily unavailable");
   const gemini = parsed.operations.upstreamManagement.failoverTemplates.gemini;
   expect(gemini.platform).toBe("gemini");
   const matchGemini = (status: number, body: unknown) => gemini.rules.find((rule) =>
