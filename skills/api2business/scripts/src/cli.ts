@@ -1901,8 +1901,11 @@ function emitPoolQuality(value: Record<string, unknown>, json: boolean): void {
 
 function emitRechargeCandidates(value: Record<string, unknown>, json: boolean): void {
   if (json) return emit(value, true);
-  const rows = Array.isArray(value.candidates) ? value.candidates.map(record).filter((row): row is Record<string, unknown> => row !== null) : [];
-  console.log(`API2BUSINESS RECHARGE CANDIDATES threshold=¥${String(value.lowBalanceThresholdCny)} lookback=${String(value.lookbackHours)}h candidates=${rows.length} queryMs=${String(value.queryDurationMs)} totalMs=${String(value.totalDurationMs)}`);
+  const allRows = Array.isArray(value.candidates) ? value.candidates.map(record).filter((row): row is Record<string, unknown> => row !== null) : [];
+  const displayLimit = typeof value.displayLimit === "number" ? value.displayLimit : allRows.length;
+  const rows = allRows.slice(0, displayLimit);
+  const omitted = Math.max(0, allRows.length - rows.length);
+  console.log(`API2BUSINESS RECHARGE CANDIDATES threshold=¥${String(value.lowBalanceThresholdCny)} lookback=${String(value.lookbackHours)}h candidates=${allRows.length} shown=${rows.length} omitted=${omitted} queryMs=${String(value.queryDurationMs)} totalMs=${String(value.totalDurationMs)}`);
   console.log("RANK  SCORE  ACTION                 REASON                       BALANCE  ANCHOR                 REQ  FAIL%  TTFT_P95  API_USD  COST_CNY  ACCOUNT");
   for (const [index, row] of rows.entries()) {
     const rate = typeof row.failureRate === "number" ? `${(row.failureRate * 100).toFixed(1)}%` : "-";

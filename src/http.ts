@@ -467,7 +467,7 @@ export function createHandler(
         return json(await operations.upstreamQuotaSummary());
       }
       if (request.method === "GET" && url.pathname === "/api/upstreams/recharge-candidates") {
-        return json(await operations.upstreamRechargeCandidates());
+        return json(await operations.upstreamRechargeCandidates(url.searchParams.get("all") === "true"));
       }
       if (request.method === "POST" && url.pathname === "/api/upstreams/capacity") {
         const input = await body(request);
