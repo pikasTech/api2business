@@ -18,6 +18,7 @@ import { runToolProbe, type ToolProbeMode } from "./probe-tool";
 import { runComboProbe, runSingleToolProbe, type ComboMode } from "./probe-combo";
 import type { ProbeTool } from "./probe-combo-attribution";
 import { probeCacheUsage } from "./probe-cache-usage";
+import { runAutomaticToolProbe } from './automatic-tool-probe';
 
 type Row = Record<string, unknown>;
 
@@ -805,6 +806,20 @@ export class ProbeIsolationService {
       body: JSON.stringify(body),
     });
     return mode === "mixed" || mode === "functions" ? runComboProbe(model, mode, transport, send) : runSingleToolProbe(model, mode, transport, send);
+  }
+
+  async automaticToolProbe(accountId: number, model: string, mode: 'codex-custom' | 'submit_sum', scope: ProbeIsolationScope, timeoutMs: number): Promise<Record<string, unknown>> {
+    const binding = this.get(accountId, scope);
+    const stored = this.readFile().records[String(accountId)];
+    if (!binding || !stored || binding.groupId !== stored.groupId) throw new Error('账号缺少就绪的单账号隔离绑定');
+    const transport = probeTransport(scope.platform);
+    const signal = AbortSignal.timeout(timeoutMs);
+    const chat = transport === 'chat_completions';
+    const url = `${this.config.sub2api.idleProbe.isolation.gatewayBaseUrl}${chat ? '/chat/completions' : '/responses'}`;
+    return runAutomaticToolProbe(accountId, binding.groupId, model, mode, transport, (body) => fetch(url, {
+      method: 'POST', redirect: 'error', signal,
+      headers: { accept: chat ? 'application/json' : 'text/event-stream', 'content-type': 'application/json', authorization: `Bearer ${stored.apiKey}` }, body: JSON.stringify(body),
+    }));
   }
 
   async request(accountId: number, input: string, model: string, maxOutputTokens: number, timeoutMs: number): Promise<Record<string, unknown>> {

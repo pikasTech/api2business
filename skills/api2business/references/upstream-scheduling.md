@@ -29,7 +29,7 @@
 - 保留固定前缀；只观察回执轮的缓存用量。`cacheHit=true` 表示读取量大于零，`false` 表示明确为零，`null` 表示没有证据。
   缓存不参与单工具判题；不把首轮命中当作回执轮命中，不因缓存未命中或缺字段重试。
 
-- Codex 作用域的 Responses 路由支持工具题；既有数字题与自动空闲探活不变。
+- Codex 作用域的 Responses 路由支持工具题；既有数字题保留。
   每个账号、模型、题型每轮只有一个 `qualityOk` 布尔结果；错误阶段、请求 ID 和耗时只用于诊断。
 - 默认沿用 Codex 的 `additional_tools → functions → custom/exec` 声明。
   普通函数题单独声明 JSON 参数；普通函数成功不能替代自定义工具成功。
@@ -41,6 +41,17 @@
   超时或传输失败仅说明本轮未通过，不证明模型缺少工具能力。
 - 手动工具探针只消费已就绪的单账号隔离绑定，不创建绑定、不启动服务、不恢复停调账号，
   不触发调度或计分。结论仅覆盖被测账号、模型与网关路径。命令见[账号操作](account-operations.md#手动选题)。
+
+## 自动空闲探活选题
+
+- 每个作用域从 `idleProbeMode` 选一道题；缺省 `math`，`submit_sum` 跨域，`codex-custom` 仅限 Codex。
+- `features.idleProbe` 仍独立决定是否排程；通过 `config idle-probes --file <策略.json> [--confirm]` 预览或应用。
+  策略形如 `{"codex":{"mode":"codex-custom"},"claude":{"mode":"submit_sum"}}`；`enabled` 可选，不传则不改启停。恢复 `math` 不删除历史。
+- 单工具题复用就绪的单账号隔离绑定，只试本轮所选模型，不切模型或回退数字题。缓存只观察回执轮。
+- 质量按题、计量按请求。历史一条题证据包含首轮和回执轮各自的请求 ID、HTTP；首轮失败没有回执轮。
+  首轮与回执均进入正常网关用量；评分不把准备调用再当一个成功，不因无归属的传输错误给账号扣分。
+- 以 `accounts idle-probe history --scope <作用域>` 核对 `triggerType=automatic`、终态和 `requestEvidence` 的实际选题。
+  优先级由既有自动策略决定；已处于最末档的账号可能保持原值，不以探针直接改优先级。
 
 ## 配置收口与事故复盘
 

@@ -600,7 +600,7 @@ export class OperationsService {
               cacheReadTokens, cacheReadField, cacheHit, errorMarker,
             } = response;
             return (typeof clientRequestId === "string" && clientRequestId.trim())
-              || (typeof requestId === "string" && requestId.trim())
+              || (typeof requestId === "string" && requestId.trim()) || requestKind === 'single-tool'
               ? [{
                   accountId,
                   accountName: typeof item?.accountName === "string" ? item.accountName.slice(0, 300) : null,
@@ -611,6 +611,7 @@ export class OperationsService {
                   terminalStatus, finishReason, refusal, ttftMs, durationMs, endToEndMs,
                   requestKind, transport, cacheMode, cachePrefixFingerprint, inputTokens, outputTokens,
                   cacheReadTokens, cacheReadField, cacheHit, errorMarker,
+                  ...(requestKind === 'single-tool' ? { mode: response.mode, stage: response.stage, reason: response.reason, requests: response.requests } : {}),
                 }] : [];
           }) : [],
         });

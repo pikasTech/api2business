@@ -654,6 +654,18 @@ test("scope idleProbeCacheMode overrides cache heuristics for plan and run", asy
   expect(modes).toEqual(["full"]);
 });
 
+test('scoped single-tool failure does not invoke math or retry another model', async () => {
+  const codex = {platform:'openai',enabled:true,eligibleGroupIds:[51],features:{idleProbe:true},idleProbeModels:['test1','test2'],idleProbeMode:'codex-custom'};
+  const testConfig = {...config, operations:{upstreamSchedulingV2:{enabled:true,scopes:{codex}}}} as unknown as AppConfig;
+  const attempts: string[] = [];
+  const isolation = {get:()=>({accountId:307,groupId:51}), automaticToolProbe:async (_accountId:number, model:string, mode:string)=>{
+    attempts.push(`${mode}/${model}`); return {qualityOk:false,ordinaryLogRecorded:true,httpStatus:200,answerClassification:'call_type_mismatch'};
+  }};
+  const service = new IdleAccountProbeService(testConfig,reads([{account_id:307,account_name:'test',platform:'openai',account_status:'active',schedulable:true,group_ids:[51],model_mapping_keys:['test1','test2']}]),{} as never,isolation as never);
+  expect(await service.run([],1,'codex')).toMatchObject({attempted:1,failed:1});
+  expect(attempts).toEqual(['codex-custom/test1']);
+});
+
 test("OpenCode Free probes only the scope model using the full prefix", async () => {
   const scopedConfig = {
     ...config,

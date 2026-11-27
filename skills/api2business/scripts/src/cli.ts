@@ -1,5 +1,6 @@
 import { verifyObservationWindow } from "./observability-fixture";
 import { observabilityHelp, configureObservability, compactObservation, checkObservability } from "./observability";
+import { configureIdleProbes } from './configure-idle-probes';
 import { runWebScreenshot, webScreenshotHelp } from "./web-screenshot";
 import { historicalBalanceHelp, nativeHelp, operationHelp, priorityHistoryHelp, upstreamsUsageHelp } from "./operation-help";
 import { measureQuotaMonitor } from './quota-monitor-measure';
@@ -329,7 +330,7 @@ function help(): Record<string, unknown> {
     ok: true,
     usage: "bun skills/api2business/scripts/api2business-cli.ts --config config/api2business.example.yaml [--over-api <absolute-http(s)-URL>] <command>",
     commands: [
-      "config validate",
+      "config validate | config idle-probes --file <scope-policy.json> [--confirm]",
       "backend check",
       "scores get|pool-quality-refresh|refresh|rank [--calls N] [--account <id-or-name>] [--group <id-or-exact-name>]|aggregate-smoke",
       "scores pool-quality [--scope <configured-scope>] [--platform <same scope>] --over-api <absolute-http(s)-URL> (default codex)",
@@ -1655,6 +1656,10 @@ export async function runCli(args: string[]): Promise<void> {
       return emit(configureObservability(parsed.configPath,parsed.file,parsed.confirm),parsed.json);
     }
     const config = loadConfig(parsed.configPath);
+    if (parsed.command.join(' ') === 'config idle-probes') {
+      if (!parsed.file || parsed.overApi) throw new Error('config idle-probes requires --file and targets the local owning YAML');
+      return emit(configureIdleProbes(parsed.configPath,parsed.file,parsed.confirm),parsed.json);
+    }
     if (parsed.command.join(" ") === "config validate") return emit({
       ok: true, configPath: config.configPath, kind: config.kind, service: config.metadata.name,
       temporalNamespace: config.temporal.namespace,

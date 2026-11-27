@@ -303,6 +303,7 @@ export function operationHelp(args: string[]): Record<string, unknown> | null {
   const position = (first: string, second?: string): number => args.findIndex((item, index) => item === first && (second === undefined || args[index + 1] === second));
   const actionAfter = (start: number, actions: readonly string[]): string | undefined => args.slice(start + 1).find((item) => actions.includes(item));
   const idleProbe = position("accounts", "idle-probe");
+  if (position('config','idle-probes') >= 0) return {ok:true, command:'config idle-probes', usage:'config idle-probes --file <scope-policy.json> [--confirm]', behavior:'只修改本地 owning YAML。输入为作用域到 {mode, enabled?} 的对象，默认预览；未列出的作用域保持原状。'};
   if (position("accounts", "combo-probe") >= 0) return {
     ok: true, command: "accounts combo-probe", usage: "accounts combo-probe --scope <configured-scope> --accounts <ids> [--mode mixed|functions] [--model <id>] [--json]",
     behavior: "L0 多工具题校验算术、同轮双工具、回执与缓存。失败只报告 toolIssues，不触发单工具探针。mixed 默认；functions 是双普通函数对照。",

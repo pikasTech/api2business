@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { runComboProbe, runSingleToolProbe, type ComboMode } from "./probe-combo";
 import { type MathProbeTransport } from "./probe-math";
 import { probeCacheUsage } from "./probe-cache-usage";
+import { runAutomaticToolProbe } from './automatic-tool-probe';
 import { assessCalls, type ProbeTool } from "./probe-combo-attribution";
 
 type Row = Record<string, unknown>;
@@ -57,6 +58,18 @@ function simulate(transport: MathProbeTransport, mode: ComboMode, fault: Fault, 
   } };
 }
 for (const transport of ["responses", "chat_completions"] as const) {
+  test(`${transport}: automatic single-tool stores both requests but one verdict, even without cache`, async () => {
+    const fixture = simulate(transport, 'functions', 'unknown');
+    let count = 0;
+    const result = await runAutomaticToolProbe(27, 22, 'test', 'submit_sum', transport, async body => {
+      const response = await fixture.send(body);
+      response.headers.set('x-client-request-id', String(++count));
+      return response;
+    });
+    expect(result).toMatchObject({qualityOk:true, ordinaryLogRecorded:true, cacheHit:null, stage:'receipt', clientRequestId:'2', requests:[{stage:'call',clientRequestId:'1'},{stage:'receipt',clientRequestId:'2'}]});
+    const failed = await runAutomaticToolProbe(27,22,'test','submit_sum',transport,async ()=>new Response(null,{status:503,headers:{'x-client-request-id':'1'}}));
+    expect(failed).toMatchObject({qualityOk:false,ordinaryLogRecorded:false,httpStatus:503,stage:'call',requests:[{clientRequestId:'1'}]});
+  });
   for (const mode of ["mixed", "functions"] as const) {
     test(`${transport} ${mode}: only the scored turn's cache counts`, async () => {
       for (const [fault, reason, turns] of [["none", "correct", 2], ["partial", "call_count", 1], ["wrong_product", "invalid_product", 1],
