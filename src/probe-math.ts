@@ -67,6 +67,10 @@ export const PROBE_CACHE_ROUTING_KEY = "api2business-idle-probe-v1";
 
 export type MathProbeTransport = "responses" | "chat_completions";
 
+export function probeTransport(platform?: string): MathProbeTransport {
+  return platform === "deepseek" || platform === "gemini" ? "chat_completions" : "responses";
+}
+
 export interface MathProbeRequestInput {
   model: string;
   question: string;
