@@ -75,6 +75,37 @@ export function upstreamsUsageHelp(): Record<string, unknown> {
   };
 }
 
+export function upstreamsUsageCacheHelp(): Record<string, unknown> {
+  return {
+    ok: true,
+    command: "upstreams usage-cache",
+    usage: `${entry} --config <owning-YAML> upstreams usage-cache [--accounts <id-or-range,...>] --over-api <absolute-http(s)-URL> [--json]`,
+    options: {
+      "--config": configOption,
+      "--accounts": "可选；正整数账号 ID、逗号列表或范围；省略时读取全部既有额度缓存行",
+      "--over-api": overApiOption,
+      "--json": jsonOption,
+    },
+    behavior: "只读读取最近一次持久化额度缓存，不探测供应商、不充值、不恢复账号或修改调度。",
+    verification: "核对 cachedAt、lastSuccessfulAt、results 行数及账号覆盖；缺失窗口写 unknown，不把缓存值当作本轮供应商探活成功。",
+  };
+}
+
+export function rechargeCandidatesHelp(): Record<string, unknown> {
+  return {
+    ok: true,
+    command: "upstreams recharge-candidates",
+    usage: `${entry} --config <owning-YAML> upstreams recharge-candidates --over-api <absolute-http(s)-URL> [--json]`,
+    options: {
+      "--config": configOption,
+      "--over-api": overApiOption,
+      "--json": jsonOption,
+    },
+    behavior: "只读生成充值候选与建议，不充值、不恢复账号、不修改余额或调度；证据不足的候选保留原因并降低置信度。",
+    verification: "核对 candidateCount、耗尽与低余额分类、recommendedCount，并按 walletKey 去重；只有证据充分的候选才进入建议表。",
+  };
+}
+
 type UpstreamWriteAction = "recover" | "status" | "update" | "models sync";
 
 export function upstreamWriteHelp(action: UpstreamWriteAction): Record<string, unknown> {
@@ -336,5 +367,8 @@ export function operationHelp(args: string[]): Record<string, unknown> | null {
   }
   const modelAlias = position("upstreams", "model-alias");
   if (modelAlias >= 0) return modelAliasHelp();
+  const usageCache = position("upstreams", "usage-cache");
+  if (usageCache >= 0 && args[usageCache + 2] !== "restore") return upstreamsUsageCacheHelp();
+  if (position("upstreams", "recharge-candidates") >= 0) return rechargeCandidatesHelp();
   return null;
 }

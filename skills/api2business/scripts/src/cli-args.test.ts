@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { assertErrorsQueryBounds, assertObservationWindow, assertSchedulingRuntimeQuery, normalizeCliArgs, parseArgs, poolQualityScope, priorityHistoryDiagnostics, selectPriorityHistory, summarizeWorkflowStatus } from "./cli";
-import { operationHelp, priorityHistoryHelp, upstreamsUsageHelp, upstreamWriteHelp } from "./operation-help";
+import { operationHelp, priorityHistoryHelp, rechargeCandidatesHelp, upstreamsUsageCacheHelp, upstreamsUsageHelp, upstreamWriteHelp } from "./operation-help";
 import { webProbeElementArgs } from "./web-screenshot";
 
 test("historical balance CLI accepts signed USD without consuming the next option", () => {
@@ -100,6 +100,17 @@ test("operation help returns action-specific contracts without loading config", 
   expect(String(usage.usage)).toContain("--accounts");
   expect(String(usage.verification)).toContain("quotaWindowCoverage");
   expect(JSON.stringify(usage)).toContain("workflow status");
+
+  const usageCache = operationHelp(["upstreams", "usage-cache", "--help"]);
+  expect(usageCache).toMatchObject({ ok: true, command: "upstreams usage-cache" });
+  expect(String(usageCache?.usage)).toContain("--accounts");
+  expect(String(usageCache?.verification)).toContain("lastSuccessfulAt");
+  expect(upstreamsUsageCacheHelp()).toMatchObject({ ok: true, command: "upstreams usage-cache" });
+
+  const rechargeCandidates = operationHelp(["upstreams", "recharge-candidates", "--help"]);
+  expect(rechargeCandidates).toMatchObject({ ok: true, command: "upstreams recharge-candidates" });
+  expect(String(rechargeCandidates?.verification)).toContain("recommendedCount");
+  expect(rechargeCandidatesHelp()).toMatchObject({ ok: true, command: "upstreams recharge-candidates" });
 
   const quotaSample = operationHelp(["upstreams", "quota-monitor", "sample", "--help"]);
   expect(quotaSample).toMatchObject({ ok: true, command: "upstreams quota-monitor sample" });
