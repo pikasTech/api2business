@@ -186,6 +186,7 @@ export interface UpstreamSchedulingV2Features {
 }
 
 export interface UpstreamSchedulingV2Scope {
+  idleProbeMode?: 'math' | 'codex-custom' | 'submit_sum';
   enabled: boolean;
   platform: "openai" | "anthropic" | "grok" | "deepseek" | "opencode_go" | "command_code" | "gemini";
   eligibleGroupIds: number[];
@@ -749,6 +750,10 @@ function readUpstreamSchedulingV2(value: unknown, path: string): UpstreamSchedul
       throw new Error(`${scopePath}.priorityPlan.eligibleGroupIds must match ${scopePath}.eligibleGroupIds`);
     }
     const idleProbeEnabled = booleanValue(features, "idleProbe", `${scopePath}.features`);
+    const idleProbeMode = scope.idleProbeMode ?? 'math';
+    if (idleProbeMode !== 'math' && idleProbeMode !== 'submit_sum' && !(idleProbeMode === 'codex-custom' && name === 'codex' && platform === 'openai')) {
+      throw new Error(`${scopePath}.idleProbeMode must be math, submit_sum or (Codex only) codex-custom`);
+    }
     if (name === "opencode-free" && idleProbeEnabled && idleProbeCandidateLimit !== 1) {
       throw new Error(`${scopePath}.idleProbeCandidateLimit must be 1 for shared-outlet protection`);
     }
@@ -760,6 +765,7 @@ function readUpstreamSchedulingV2(value: unknown, path: string): UpstreamSchedul
       throw new Error(`${scopePath}.accountCapacity must be 1 for shared-outlet protection`);
     }
     scopes[name] = {
+      idleProbeMode,
       enabled: booleanValue(scope, "enabled", scopePath),
       platform: platform as UpstreamSchedulingV2Scope["platform"],
       eligibleGroupIds: [...new Set(eligibleGroupIds)].sort((a, b) => a - b),

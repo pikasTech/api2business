@@ -57,6 +57,11 @@ bun skills/api2business/scripts/api2business-cli.ts accounts tool-probe --scope 
 普通 JSON 函数题用 `--mode function`。两种工具题的判据见
 [手动工具探针](upstream-scheduling.md#手动工具探针)。
 
+组合题用 `accounts combo-probe --scope <作用域> --accounts <账号> --mode mixed --json`。
+双普通函数对照用 `--mode functions`。失败只查看 `toolIssues`，不追加请求。
+独立测一个标准工具用 `accounts tool-probe --scope <作用域> --accounts <账号> --mode exec --json`，也可指定 `submit_sum` 或 `submit_product`。
+所有单工具题均校验算术与回执；查 `cacheReadField`、`cacheReadTokens` 观察回执轮缓存。缓存为零或未知均不判错。
+
 ## 空闲探活
 
 - 探活账号范围、隔离分组、模型白名单、轮次终态和覆盖判定统一见

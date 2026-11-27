@@ -303,10 +303,15 @@ export function operationHelp(args: string[]): Record<string, unknown> | null {
   const position = (first: string, second?: string): number => args.findIndex((item, index) => item === first && (second === undefined || args[index + 1] === second));
   const actionAfter = (start: number, actions: readonly string[]): string | undefined => args.slice(start + 1).find((item) => actions.includes(item));
   const idleProbe = position("accounts", "idle-probe");
+  if (position('config','idle-probes') >= 0) return {ok:true, command:'config idle-probes', usage:'config idle-probes --file <scope-policy.json> [--confirm]', behavior:'只修改本地 owning YAML。输入为作用域到 {mode, enabled?} 的对象，默认预览；未列出的作用域保持原状。'};
+  if (position("accounts", "combo-probe") >= 0) return {
+    ok: true, command: "accounts combo-probe", usage: "accounts combo-probe --scope <configured-scope> --accounts <ids> [--mode mixed|functions] [--model <id>] [--json]",
+    behavior: "L0 多工具题校验算术、同轮双工具、回执与缓存。失败只报告 toolIssues，不触发单工具探针。mixed 默认；functions 是双普通函数对照。",
+  };
   if (position("accounts", "tool-probe") >= 0) return {
     ok: true, command: "accounts tool-probe",
-    usage: "accounts tool-probe --scope codex --accounts <ids> [--model <id>] [--mode codex-custom|function] [--json]",
-    behavior: "L0 使用已就绪的隔离绑定。默认 codex-custom。每账号一题一个 qualityOk，不修改绑定、调度或评分。",
+    usage: "accounts tool-probe --scope <configured-scope> --accounts <ids> [--model <id>] [--mode exec|submit_sum|submit_product|codex-custom|function] [--json]",
+    behavior: "L0 独立单工具算术题；调用、算术与回执正确即通过。只观察回执轮缓存，未命中或未知不判错。标准模式跨作用域，codex-custom（默认）及 function 限 codex。",
   };
   if (idleProbe >= 0) return idleProbeHelp(actionAfter(idleProbe + 1, idleProbeActions));
   const quotaMonitorSample = position("upstreams", "quota-monitor");

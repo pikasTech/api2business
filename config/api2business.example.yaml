@@ -602,6 +602,7 @@ operations:
       codex:
         enabled: true
         platform: openai
+        idleProbeMode: math
         eligibleGroupIds: [ 2, 3 ]
         idleProbeIntervalSeconds: 90
         features:

@@ -6,6 +6,13 @@ import { loadConfig } from "./config";
 
 const configDir = resolve(import.meta.dir, "../config");
 
+test('automatic tool selectors are scoped and math remains the default', () => {
+  const config = loadExampleWithMutation(raw => { raw.operations.upstreamSchedulingV2.scopes.codex!.idleProbeMode = 'codex-custom'; });
+  expect(config.operations.upstreamSchedulingV2!.scopes.codex!.idleProbeMode).toBe('codex-custom');
+  expect(config.operations.upstreamSchedulingV2!.scopes.claude!.idleProbeMode).toBe('math');
+  expect(() => loadExampleWithMutation(raw => { raw.operations.upstreamSchedulingV2.scopes.claude!.idleProbeMode = 'codex-custom'; })).toThrow('idleProbeMode');
+});
+
 type ExampleConfig = {
   operations: {
     upstreamSchedulingV2: {

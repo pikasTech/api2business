@@ -1,4 +1,9 @@
 .git
 .state
+.worktree
+.tmp
+.env
+.claude
+config/api2business.yaml
 node_modules
 *.log

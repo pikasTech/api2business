@@ -1036,7 +1036,10 @@ export class OperationsStore {
         SELECT jsonb_build_object(
           'account_id', NULLIF(evidence->>'accountId', '')::bigint,
           'request_id', NULLIF(evidence->>'requestId', ''),
-          'client_request_id', NULLIF(evidence->>'clientRequestId', ''),
+          'client_request_id', CASE WHEN evidence->>'requestKind' = 'single-tool' AND NULLIF(evidence->>'clientRequestId','') IS NOT NULL
+            THEN 'client:' || (evidence->>'clientRequestId') ELSE NULLIF(evidence->>'clientRequestId', '') END,
+          'setup_keys', CASE WHEN evidence->>'requestKind' = 'single-tool' AND jsonb_array_length(evidence->'requests') = 2
+            THEN jsonb_build_array(evidence#>>'{requests,0,requestId}', 'client:' || (evidence#>>'{requests,0,clientRequestId}')) ELSE '[]'::jsonb END,
           'completed_at', NULLIF(evidence->>'completedAt', '')::timestamptz,
           'quality_ok', COALESCE((evidence->>'qualityOk')::boolean, false),
           'ttft_ms', NULLIF(evidence->>'ttftMs', '')::numeric,
@@ -1052,6 +1055,7 @@ export class OperationsStore {
         WHERE r.started_at < ${end}::timestamptz
           AND r.completed_at >= ${start}::timestamptz
           AND evidence ? 'qualityOk'
+          AND (evidence->>'requestKind' IS DISTINCT FROM 'single-tool' OR evidence->>'ordinaryLogRecorded' = 'true')
           AND NULLIF(evidence->>'completedAt', '') IS NOT NULL
       )
       SELECT fact

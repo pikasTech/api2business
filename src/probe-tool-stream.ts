@@ -1,8 +1,10 @@
 type Item = Record<string, unknown>;
 
-export class ToolProbeError extends Error {}
+export class ToolProbeError extends Error {
+  constructor(reason: string, readonly implicatedNames: string[] = []) { super(reason); }
+}
 
-export async function readToolTurn(response: Response): Promise<Item[]> {
+export async function readProbeBody(response: Response): Promise<string> {
   if (!response.ok || !response.body) {
     await response.body?.cancel();
     throw new ToolProbeError(`http_${response.status}`);
@@ -26,6 +28,11 @@ export async function readToolTurn(response: Response): Promise<Item[]> {
     reader.releaseLock();
   }
   body += decoder.decode();
+  return body;
+}
+
+export async function readToolTurn(response: Response, onUsage?: (usage: unknown) => void): Promise<Item[]> {
+  const body = await readProbeBody(response);
   const items: Item[] = [];
   let terminal: Item[] | undefined;
   for (const block of body.split(/\r?\n\r?\n/u)) {
@@ -40,6 +47,7 @@ export async function readToolTurn(response: Response): Promise<Item[]> {
     if (event.type === "response.completed") {
       if (event.response?.status !== "completed" || !Array.isArray(event.response.output)) throw new ToolProbeError("invalid_terminal");
       terminal = event.response.output;
+      onUsage?.(event.response.usage);
     }
   }
   if (!terminal) throw new ToolProbeError("missing_terminal");
@@ -47,9 +55,14 @@ export async function readToolTurn(response: Response): Promise<Item[]> {
   if ([...output, ...items].some((item) => !item || typeof item.type !== "string")) throw new ToolProbeError("invalid_item");
   const wireCalls = items.filter((item) => item.type !== "reasoning" && item.type !== "message");
   const finalCalls = terminal.filter((item) => item.type !== "reasoning" && item.type !== "message");
-  if (terminal.length && wireCalls.length && (wireCalls.length !== finalCalls.length || wireCalls.some((item, index) => {
-    const final = finalCalls[index];
-    return ["type", "call_id", "name", "namespace", "arguments", "input"].some((key) => item[key] !== final[key]);
-  }))) throw new ToolProbeError("stream_item_mismatch");
+  if (terminal.length && wireCalls.length) {
+    if (wireCalls.length !== finalCalls.length) throw new ToolProbeError("stream_item_mismatch");
+    const conflicts = wireCalls.flatMap((item, index) => {
+      const final = finalCalls[index];
+      if (["type", "call_id", "name", "namespace", "arguments", "input"].every((key) => item[key] === final[key])) return [];
+      return [typeof item.name === "string" && item.name === final.name ? item.name : null];
+    });
+    if (conflicts.length) throw new ToolProbeError("stream_item_mismatch", conflicts.filter((name): name is string => name !== null));
+  }
   return output;
 }

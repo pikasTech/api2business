@@ -22,11 +22,11 @@ WITH bounded_probe_facts AS MATERIALIZED (
     SELECT account_id, request_id, client_request_id,
       COALESCE(NULLIF(request_id, ''), NULLIF(client_request_id, ''),
         CONCAT('probe:', account_id::text, ':', completed_at::text)) AS request_key,
-      completed_at, quality_ok, ttft_ms, error_marker,
+      completed_at, quality_ok, ttft_ms, error_marker, setup_keys,
       ROW_NUMBER() OVER (PARTITION BY account_id ORDER BY completed_at DESC) AS fact_rank
     FROM jsonb_to_recordset($9::jsonb) AS p(
       account_id bigint, request_id text, client_request_id text,
-      completed_at timestamptz, quality_ok boolean, ttft_ms numeric, error_marker text
+      completed_at timestamptz, quality_ok boolean, ttft_ms numeric, error_marker text, setup_keys jsonb
     )
     WHERE account_id IS NOT NULL
       AND completed_at IS NOT NULL
@@ -62,6 +62,10 @@ WITH bounded_probe_facts AS MATERIALIZED (
   SELECT account_id, jsonb_object_agg(request_key, true) AS failed_requests
   FROM failed_probe_requests
   GROUP BY account_id
+), setup_by_account AS MATERIALIZED (
+  SELECT account_id, jsonb_object_agg(key, true) AS keys
+  FROM bounded_probe_facts, LATERAL jsonb_array_elements_text(setup_keys) AS setup(key)
+  WHERE key IS NOT NULL GROUP BY account_id
 ), failed_probe_facts AS MATERIALIZED (
   SELECT probe.account_id, probe.request_key, probe.completed_at,
     CASE
@@ -245,10 +249,12 @@ account_stats AS (
           ON probe.account_id = a.account_id
         LEFT JOIN failed_requests_by_account failed
           ON failed.account_id = a.account_id
+        LEFT JOIN setup_by_account setup ON setup.account_id = a.account_id
         WHERE u.created_at >= NOW() - ($5::int * INTERVAL '1 hour')
           AND LOWER(CONCAT_WS(' ', u.requested_model, u.model, u.upstream_model)) NOT LIKE '%luna%'
           AND NOT ${audioRequestSql("u", false)}
           AND NOT COALESCE(failed.failed_requests ? u.request_id, false)
+          AND NOT COALESCE(setup.keys ? u.request_id, false)
         ORDER BY u.created_at DESC
         LIMIT $1
       )

@@ -3,29 +3,32 @@ import { runToolProbe, type ToolProbeMode } from "./probe-tool";
 import { readToolTurn } from "./probe-tool-stream";
 
 type Row = Record<string, unknown>;
-function complete(output: Row[]) {
-  return new Response(`data: ${JSON.stringify({ type: "response.completed", response: { status: "completed", output } })}\n\n`);
+function complete(output: Row[], usage: Row = {}) {
+  return new Response(`data: ${JSON.stringify({ type: "response.completed", response: { status: "completed", output, usage } })}\n\n`);
 }
 
-function fixture(mode: ToolProbeMode, change: (call: Row) => Row[] = (call) => [call], answer?: string) {
+function fixture(mode: ToolProbeMode, change: (call: Row) => Row[] = (call) => [call], answer?: string, cache: number | null = 256) {
   let turns = 0;
   let challenge = "";
   const send = async (body: Row) => {
     turns++;
     const input = body.input as Row[];
     if (turns === 1) {
-      challenge = String(input.at(-1)?.content).match(/C-[a-f0-9]{16}/u)![0];
+      const prompt = String(input.at(-1)?.content);
+      const operands = /Calculate (\d+) \+ (\d+)/u.exec(prompt)!;
+      challenge = `${prompt.match(/C-[a-f0-9]{16}/u)![0]}:${Number(operands[1]) + Number(operands[2])}`;
+      expect(prompt).not.toContain(challenge);
       expect(JSON.stringify(input)).not.toMatch(/R-[0-9a-f]{32}/u);
       const tool = mode === "codex-custom"
         ? { type: "custom_tool_call", namespace: "functions", name: "exec", input: ` text( "${challenge}" );` }
         : { type: "function_call", name: "probe_receipt", arguments: JSON.stringify({ challenge }) };
-      return complete(change({ ...tool, call_id: "call_probe" }));
+      return complete(change({ ...tool, call_id: "call_probe" }), { cached_tokens: 8192 });
     }
     const receipt = input.at(-1)!;
     expect(receipt.type).toBe(mode === "codex-custom" ? "custom_tool_call_output" : "function_call_output");
     expect(receipt.call_id).toBe("call_probe");
     expect(receipt.output).toMatch(/^R-[0-9a-f]{32}$/u);
-    return complete([{ type: "message", role: "assistant", content: [{ type: "output_text", text: answer ?? ` ${receipt.output}\n` }] }]);
+    return complete([{ type: "message", role: "assistant", content: [{ type: "output_text", text: answer ?? ` ${receipt.output}\n` }] }], cache === null ? {} : { input_tokens_details: { cached_tokens: cache } });
   };
   return { send, count: () => turns };
 }
@@ -35,6 +38,16 @@ for (const mode of ["codex-custom", "function"] as const) {
     const run = fixture(mode);
     expect(await runToolProbe("test", mode, run.send)).toMatchObject({ qualityOk: true, reason: "correct" });
     expect(run.count()).toBe(2);
+  });
+  test(`${mode}: zero and missing receipt usage do not fail; wrong sums stop at the first turn`, async () => {
+    for (const [cache, cacheHit] of [[0, false], [null, null]] as const) {
+      const run = fixture(mode, undefined, undefined, cache);
+      expect(await runToolProbe("test", mode, run.send)).toMatchObject({ qualityOk: true, reason: "correct", cacheReadTokens: cache, cacheHit, stage: "receipt" });
+      expect(run.count()).toBe(2);
+    }
+    const bad = fixture(mode, (call) => [{ ...call, input: String(call.input).replace(/:\d+/u, ":0"), arguments: String(call.arguments).replace(/:\d+/u, ":0") }]);
+    expect(await runToolProbe("test", mode, bad.send)).toMatchObject({ qualityOk: false, reason: "invalid_payload" });
+    expect(bad.count()).toBe(1);
   });
 }
 

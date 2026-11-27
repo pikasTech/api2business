@@ -314,8 +314,10 @@ export class OperationalObservability {
       const probeEvidence=await this.store.idleProbeRequestEvidence(evidenceStart,window.end);
       const sourceQuery=await this.reads.query<Row>({key:`observability.source-coverage:${window.start}:${window.end}`,
         kind:"observability.window",sql:sourceCoverageSql,
-        parameters:[window.start,window.end,JSON.stringify(probeEvidence.map((r:Row)=>
-          typeof r.evidence === "string" ? JSON.parse(r.evidence) : r.evidence))],priority:"manual",cacheMode:"bypass-cache"});
+        parameters:[window.start,window.end,JSON.stringify(probeEvidence.flatMap((entry:Row)=> {
+          const evidence = typeof entry.evidence === 'string' ? JSON.parse(entry.evidence) : entry.evidence;
+          return Array.isArray(evidence?.requests) ? evidence.requests.map((hop:Row) => ({...evidence,...hop})) : [evidence];
+        }))],priority:"manual",cacheMode:"bypass-cache"});
       sourceCoverage={...taskScopeSourceCoverage(sourceQuery.rows[0]?.coverage ?? null),status:"available",
         complete:sourceCoverageFacts(sourceQuery.rows[0]?.coverage ?? null).complete,
         queryStartedAt:sourceQuery.queryStartedAt,queryCompletedAt:sourceQuery.queryCompletedAt,

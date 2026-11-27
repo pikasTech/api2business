@@ -6,6 +6,7 @@ import {
   buildMathProbeRequestBody,
   createMathProbeQuestion,
   parseMathProbeAnswer,
+  probeTransport,
   PROBE_CACHE_PREFIX_FINGERPRINT,
   PROBE_COMPACT_CACHE_PREFIX_FINGERPRINT,
   type MathProbeCacheMode,
@@ -14,6 +15,10 @@ import {
 import type { Paginated, Sub2ApiClient } from "./sub2api-client";
 import type { Sub2ApiRuntimeService } from "./sub2api-runtime-service";
 import { runToolProbe, type ToolProbeMode } from "./probe-tool";
+import { runComboProbe, runSingleToolProbe, type ComboMode } from "./probe-combo";
+import type { ProbeTool } from "./probe-combo-attribution";
+import { probeCacheUsage } from "./probe-cache-usage";
+import { runAutomaticToolProbe } from './automatic-tool-probe';
 
 type Row = Record<string, unknown>;
 
@@ -164,23 +169,7 @@ async function readProbeStream(response: Response, startedAt: number): Promise<P
     inputTokens ??= nonNegativeNumber(usage.input_tokens) ?? nonNegativeNumber(usage.prompt_tokens);
     outputTokens ??= nonNegativeNumber(usage.output_tokens) ?? nonNegativeNumber(usage.completion_tokens);
     if (cacheReadTokens !== null) return;
-    const inputDetails = row(usage.input_tokens_details);
-    const promptDetails = row(usage.prompt_tokens_details);
-    const candidates: Array<[string, unknown]> = [
-      ["input_tokens_details.cached_tokens", inputDetails.cached_tokens],
-      ["prompt_tokens_details.cached_tokens", promptDetails.cached_tokens],
-      ["cache_read_input_tokens", usage.cache_read_input_tokens],
-      ["cache_read_tokens", usage.cache_read_tokens],
-      ["cached_tokens", usage.cached_tokens],
-    ];
-    for (const [field, candidate] of candidates) {
-      const parsed = nonNegativeNumber(candidate);
-      if (parsed !== null) {
-        cacheReadTokens = parsed;
-        cacheReadField = field;
-        return;
-      }
-    }
+    ({ cacheReadTokens, cacheReadField } = probeCacheUsage(usage));
   };
 
   const appendVisible = (text: string): void => {
@@ -321,7 +310,7 @@ function ids(value: unknown): number[] {
   return value.map((item) => id(item)).filter((value): value is number => value !== null);
 }
 
-function accountGroupIds(account: Row): number[] {
+export function accountGroupIds(account: Row): number[] {
   const direct = ids(account.group_ids);
   const joins = Array.isArray(account.account_groups)
     ? account.account_groups.map((item) => id(row(item).group_id)).filter((value): value is number => value !== null)
@@ -805,10 +794,38 @@ export class ProbeIsolationService {
     }));
   }
 
+  async standardProbe(accountId: number, model: string, mode: ComboMode | ProbeTool, scope: ProbeIsolationScope, timeoutMs: number) {
+    const stored = this.readFile().records[String(accountId)];
+    if (!stored || !readyRecord(stored) || (stored.platform ?? "openai") !== scope.platform) throw new Error("账号缺少指定作用域的就绪探活绑定");
+    const transport = probeTransport(scope.platform);
+    const chat = transport === "chat_completions";
+    const signal = AbortSignal.timeout(timeoutMs);
+    const send = (body: Row) => fetch(`${this.config.sub2api.idleProbe.isolation.gatewayBaseUrl}${chat ? "/chat/completions" : "/responses"}`, {
+      method: "POST", redirect: "error", signal,
+      headers: { accept: chat ? "application/json" : "text/event-stream", "content-type": "application/json", authorization: `Bearer ${stored.apiKey}` },
+      body: JSON.stringify(body),
+    });
+    return mode === "mixed" || mode === "functions" ? runComboProbe(model, mode, transport, send) : runSingleToolProbe(model, mode, transport, send);
+  }
+
+  async automaticToolProbe(accountId: number, model: string, mode: 'codex-custom' | 'submit_sum', scope: ProbeIsolationScope, timeoutMs: number): Promise<Record<string, unknown>> {
+    const binding = this.get(accountId, scope);
+    const stored = this.readFile().records[String(accountId)];
+    if (!binding || !stored || binding.groupId !== stored.groupId) throw new Error('账号缺少就绪的单账号隔离绑定');
+    const transport = probeTransport(scope.platform);
+    const signal = AbortSignal.timeout(timeoutMs);
+    const chat = transport === 'chat_completions';
+    const url = `${this.config.sub2api.idleProbe.isolation.gatewayBaseUrl}${chat ? '/chat/completions' : '/responses'}`;
+    return runAutomaticToolProbe(accountId, binding.groupId, model, mode, transport, (body) => fetch(url, {
+      method: 'POST', redirect: 'error', signal,
+      headers: { accept: chat ? 'application/json' : 'text/event-stream', 'content-type': 'application/json', authorization: `Bearer ${stored.apiKey}` }, body: JSON.stringify(body),
+    }));
+  }
+
   async request(accountId: number, input: string, model: string, maxOutputTokens: number, timeoutMs: number): Promise<Record<string, unknown>> {
     const stored = this.readFile().records[String(accountId)];
     if (!stored || !readyRecord(stored)) throw new Error(`账号 ${accountId} 的探活隔离凭据尚未就绪`);
-    const chatCompletions = stored.platform === "deepseek" || stored.platform === "gemini";
+    const chatCompletions = probeTransport(stored.platform) === "chat_completions";
     const response = await fetch(`${this.config.sub2api.idleProbe.isolation.gatewayBaseUrl}${chatCompletions ? "/chat/completions" : "/responses"}`, {
       method: "POST",
       headers: {
@@ -877,7 +894,7 @@ export class ProbeIsolationService {
       record: stored,
     };
     const requestId = crypto.randomUUID();
-    const transport: MathProbeTransport = ensured.record.platform === "deepseek" || ensured.record.platform === "gemini" ? "chat_completions" : "responses";
+    const transport: MathProbeTransport = probeTransport(ensured.record.platform);
     const probeRequest = buildMathProbeRequestBody({
       model,
       question: question.prompt,

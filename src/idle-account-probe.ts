@@ -413,7 +413,7 @@ export class IdleAccountProbeService {
           probeCacheKnownSamples: Number(row.cache_known_samples ?? 0),
           probeCacheHitSamples: Number(row.cache_hit_samples ?? 0),
           probeCachePlatformHitSamples: Number(row.platform_cache_hit_samples ?? 0),
-          probeCacheMode: scope?.idleProbeCacheMode ?? selectProbeCacheMode(
+          probeCacheMode: scope?.idleProbeMode && scope.idleProbeMode !== 'math' ? 'full' : scope?.idleProbeCacheMode ?? selectProbeCacheMode(
             Number(row.cache_known_samples ?? 0),
             Number(row.cache_hit_samples ?? 0),
             Number(row.platform_cache_hit_samples ?? 0),
@@ -429,6 +429,7 @@ export class IdleAccountProbeService {
       mutation: false,
       model: defaultProbeModel,
       idleSeconds: policy.idleSeconds,
+      probeMode: scope?.idleProbeMode ?? 'math',
       candidateLimit,
       candidates,
       rolling24Hours,
@@ -686,7 +687,10 @@ export class IdleAccountProbeService {
             await Bun.sleep(jitterMs);
             for (const [index, attemptModel] of probeModels.entries()) {
               model = attemptModel;
-              const attemptResponse = await this.isolation!.probe(
+              const mode = scope?.idleProbeMode ?? 'math';
+              const attemptResponse = mode !== 'math' && isolationScope
+                ? await this.isolation!.automaticToolProbe(candidate.accountId, model, mode, isolationScope, policy.accountTimeoutMs)
+                : await this.isolation!.probe(
                 candidate.accountId,
                 attemptModel,
                 policy.accountTimeoutMs,
@@ -706,7 +710,7 @@ export class IdleAccountProbeService {
                   ? attemptResponse.answerClassification : null,
                 errorMarker: typeof attemptResponse.errorMarker === "string" ? attemptResponse.errorMarker : null,
               });
-              if (attemptOk || index === probeModels.length - 1
+              if (mode !== 'math' || attemptOk || index === probeModels.length - 1
                 || !nextProbeModelMayHelp(attemptResponse)) break;
             }
             return {
