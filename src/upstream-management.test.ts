@@ -237,6 +237,18 @@ test("failover template uses the Sub2API native error_code schema", async () => 
   expect(laneLockRule?.duration_minutes).toBe(30);
   expect(badResponseRule?.duration_minutes).toBe(3);
   expect(openAIErrorRules.map((rule) => rule.error_code)).toEqual([400]);
+  const nonstreamUnavailableRule = parsed.operations.upstreamManagement.failoverRulesByPlatform.openai.find(
+    (rule) => rule.error_code === 400 && rule.keywords.includes("当前分组无支持非流请求账号，请切换为流式请求。"),
+  );
+  expect(nonstreamUnavailableRule?.duration_minutes).toBe(3);
+  const nonstreamUnavailableBody = JSON.stringify({ error: {
+    message: "当前分组无支持非流请求账号，请切换为流式请求。",
+    type: "nonstream_unavailable",
+  } }).toLowerCase();
+  expect(parsed.operations.upstreamManagement.failoverRulesByPlatform.openai.find((rule) =>
+    rule.error_code === 400 && rule.keywords.some((keyword) =>
+      nonstreamUnavailableBody.includes(keyword.toLowerCase())))
+  ).toBe(nonstreamUnavailableRule);
   expect(parsed.operations.upstreamManagement.failoverRules
     .find((rule) => rule.error_code === 400)?.keywords)
     .not.toContain("ran out of room in the model's context window");
@@ -264,7 +276,7 @@ test("failover template uses the Sub2API native error_code schema", async () => 
     (rule) => rule.error_code === 503 && rule.keywords.includes("service temporarily unavailable"),
   );
   expect(serviceUnavailableRule?.duration_minutes).toBe(3);
-  expect(codexTemplate).toContain("description: 上游明确返回 gpt-5.6-terra、gpt-5.6-sol 或 gpt-6.1-sol 的 Provider 不支持、模型尚未定价、模型容量、工具调用上下文缺失、临时过载、包装层故障或供应商上下文空间故障");
+  expect(codexTemplate).toContain("description: 上游明确返回 gpt-5.6-terra、gpt-5.6-sol 或 gpt-6.1-sol 的 Provider 不支持、非流能力不可用、模型尚未定价、模型容量、工具调用上下文缺失、临时过载、包装层故障或供应商上下文空间故障");
 });
 
 test("usage target discovery uses one queued database read", async () => {
