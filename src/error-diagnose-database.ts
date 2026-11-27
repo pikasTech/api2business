@@ -1,5 +1,6 @@
 import type { AppConfig } from "./config";
 import { detectLaneLock } from "./lane-lock";
+import { customerBillingLimitSql, hasCustomerBillingLimitEvidence } from "./scoring-error-policy";
 import type {
   Sub2ApiReadClient,
   Sub2ApiReadPriority,
@@ -234,7 +235,7 @@ error_chains AS (
       'upstreamErrorMessage', upstream_error_message,
       'upstreamErrorDetail', upstream_error_detail,
       'systemLogText', system_log_text,
-      'businessLimited', COALESCE(is_business_limited, false),
+      'businessLimited', ${customerBillingLimitSql("classified")},
       'stablePhrase', stable_phrase,
       'signature', signature,
       'createdAt', created_at
@@ -442,7 +443,20 @@ export function projectErrorDiagnoseRow(row: Row): Row {
           attempt.upstreamErrorDetail,
         ].map((raw) => String(raw ?? "")).join(" "),
       });
-      return { ...attempt, laneLock };
+      return {
+        ...attempt,
+        businessLimited: hasCustomerBillingLimitEvidence({
+          account_id: attempt.accountId,
+          error_phase: attempt.phase,
+          upstream_status_code: attempt.upstreamStatusCode,
+          error_message: attempt.errorMessage,
+          error_body: attempt.errorBody,
+          upstream_error_message: attempt.upstreamErrorMessage,
+          upstream_error_detail: attempt.upstreamErrorDetail,
+          is_business_limited: attempt.businessLimited,
+        }),
+        laneLock,
+      };
     }) : chain.attempts;
     return { ...chain, attempts };
   }) : [];

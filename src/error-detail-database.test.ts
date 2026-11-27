@@ -21,6 +21,8 @@ test("error detail queries are bounded and request scoped", () => {
   expect(errorGetQuery).toContain("'insufficientCredits'");
   expect(errorGetQuery).toContain("'laneLocked'");
   expect(errorGetQuery).toContain("our free model is holding this lane shut locally");
+  expect(errorGetQuery).toContain("insufficient account balance");
+  expect(errorGetQuery).toContain("error_phase");
   expect(errorListQuery).not.toContain("SET TRANSACTION READ ONLY");
 });
 
@@ -103,8 +105,27 @@ test("native error list keeps business-limited rows visible", () => {
     recorded_status_code: 429,
     display_status_code: 429,
     is_business_limited: true,
+    error_message: "insufficient account balance",
   }, "Asia/Shanghai");
   expect(row.businessLimited).toBeTrue();
+  expect(row.category).toBe("quota");
+  expect(row.customerVisible).toBeTrue();
+});
+
+test("routing upstream unavailable does not inherit an ambiguous business flag", () => {
+  const row = projectErrorDetailRow({
+    id: 8,
+    account_id: 1604,
+    error_phase: "routing",
+    error_type: "api_error",
+    category: "quota",
+    recorded_status_code: 503,
+    display_status_code: 503,
+    upstream_status_code: 503,
+    is_business_limited: true,
+    upstream_error_detail: '{"error":{"code":503,"message":"No available Gemini accounts: no available accounts","status":"INTERNAL"}}',
+  }, "Asia/Shanghai");
+  expect(row.businessLimited).toBeFalse();
   expect(row.category).toBe("quota");
   expect(row.customerVisible).toBeTrue();
 });

@@ -34,6 +34,8 @@ test("error diagnosis uses one bounded query for signatures and failover chains"
   expect(errorDiagnoseQuery).toContain("message_text LIKE '%insufficient credits%'");
   expect(errorDiagnoseQuery).toContain("our free model is holding this lane shut locally");
   expect(errorDiagnoseQuery).toContain("THEN 'lane_locked'");
+  expect(errorDiagnoseQuery).toContain("insufficient account balance");
+  expect(errorDiagnoseQuery).toContain("error_phase");
 });
 
 test("error diagnosis projection exposes bounded facts without raw payloads", () => {
@@ -101,4 +103,25 @@ test("error diagnosis classifies OpenCode Free lane locks before generic 429s", 
     recordedAt: "2026-11-25T09:30:00.000Z",
     liftsAt: "2026-11-25T10:00:00.000Z",
   });
+});
+
+test("error diagnosis does not label upstream no-account errors as customer billing", () => {
+  const projected = projectErrorDiagnoseRow({
+    sampled_error_rows: 1,
+    distinct_requests: 1,
+    customer_visible_requests: 1,
+    chains: [{
+      requestId: "request-gemini",
+      attempts: [{
+        accountId: 1604,
+        statusCode: 503,
+        upstreamStatusCode: 503,
+        phase: "routing",
+        upstreamErrorDetail: '{"error":{"code":503,"message":"No available Gemini accounts: no available accounts","status":"INTERNAL"}}',
+        businessLimited: true,
+      }],
+    }],
+  });
+  const attempts = ((projected.chains as Array<Record<string, unknown>>)[0].attempts as Array<Record<string, unknown>>);
+  expect(attempts[0].businessLimited).toBeFalse();
 });

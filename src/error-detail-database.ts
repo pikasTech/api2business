@@ -1,6 +1,7 @@
 import type { AppConfig } from "./config";
 import { detectLaneLock } from "./lane-lock";
 import { terminalPolicyExistsSql, usageRequestMatchesSql } from "./request-terminal-policy";
+import { customerBillingLimitSql, hasCustomerBillingLimitEvidence } from "./scoring-error-policy";
 import type {
   Sub2ApiReadClient,
   Sub2ApiReadPriority,
@@ -147,7 +148,7 @@ const projectionColumnsSql = `
     WHERE l.request_id = enriched.request_id
   ), '') AS system_log_text,
   CASE
-    WHEN COALESCE(is_business_limited, false) THEN 'quota'
+    WHEN ${customerBillingLimitSql("enriched")} THEN 'quota'
     WHEN LOWER(COALESCE(error_phase, '')) = 'auth' THEN 'auth'
     WHEN LOWER(COALESCE(error_phase, '')) = 'routing' THEN 'service_unavailable'
     WHEN LOWER(COALESCE(error_phase, '')) IN ('account_auth', 'upstream', 'network') THEN 'upstream'
@@ -327,7 +328,7 @@ export function projectErrorDetailRow(row: Row, timezone: string): Row {
     upstreamStatusCode: integer(row.upstream_status_code),
     providerErrorCode: row.provider_error_code ?? null,
     providerErrorType: row.provider_error_type ?? null,
-    businessLimited: row.is_business_limited === true,
+    businessLimited: hasCustomerBillingLimitEvidence(row),
     category: laneLock ? "lane_locked" : row.category ?? "other",
     recovered: row.recovered === true,
     failoverObserved: row.failover_observed === true,
