@@ -73,6 +73,29 @@ export function customerBillingLimitSql(alias: string): string {
     AND NOT ${explicitUpstreamErrorSql(alias)})`;
 }
 
+function rowMessageText(row: Record<string, unknown>): string {
+  return [
+    row.error_message,
+    row.error_body,
+    row.upstream_error_message,
+    row.upstream_error_detail,
+  ].map((value) => String(value ?? "")).join(" ").toLowerCase();
+}
+
+export function hasCustomerBillingLimitEvidence(row: Record<string, unknown>): boolean {
+  const limited = row.is_business_limited === true
+    || String(row.error_phase ?? "").trim().toLowerCase() === "business";
+  if (!limited) return false;
+  const message = rowMessageText(row);
+  if (!nonScoreableBillingErrorPatterns.some((pattern) => message.includes(pattern))) return false;
+  return !(
+    row.account_id !== null
+    && row.account_id !== undefined
+    && String(row.error_phase ?? "").trim().toLowerCase() === "upstream"
+    && Number(row.upstream_status_code ?? 0) >= 400
+  );
+}
+
 // 同一余额短语可能来自客户账户或已选上游。明确的上游状态不能被关键词误排除。
 export function explicitUpstreamErrorSql(alias: string): string {
   if (!/^[a-z][a-z0-9_]*$/u.test(alias)) throw new Error("invalid upstream policy SQL alias");
