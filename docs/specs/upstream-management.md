@@ -15,13 +15,8 @@
 
 ## 手动探针选题
 
-- 数字题与工具题按需独立触发。工具题每轮只出一个结果，不改变评分或调度。
-- 详细判据见[手动工具探针](../../skills/api2business/references/upstream-scheduling.md#手动工具探针)。
-- 跨作用域组合题独立选择；算术、同轮双工具、回执和缓存只出一个结果。判据见[组合题](../../skills/api2business/references/upstream-scheduling.md#算术双工具和缓存组合题)。
-- 多工具、单工具两种探针分别手动触发、独立判定；组合失败后只报告异常工具，不回退或追加单测。
-- 单工具题按调用、算术、回执判定；回执轮的缓存用量单独记录，零或缺失不改变正确性结果。
-- 自动空闲探活按作用域独立选用数字或单工具题，不触发组合题；见[自动选题](../../skills/api2business/references/upstream-scheduling.md#自动空闲探活选题)。
-- 操作入口见[账号操作](../../skills/api2business/references/account-operations.md#手动选题)。
+- 手动探针不调整账号调度；选题和质量判据见[手动工具探针](../../skills/api2business/references/upstream-scheduling.md#手动工具探针)。
+- 自动探活沿用既有评分和调度规则；切换与验收见[自动空闲探活选题](../../skills/api2business/references/upstream-scheduling.md#自动空闲探活选题)。
 
 ## 转接 API-key 上游策略
 

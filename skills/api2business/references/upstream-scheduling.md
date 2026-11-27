@@ -50,8 +50,23 @@
 - 单工具题复用就绪的单账号隔离绑定，只试本轮所选模型，不切模型或回退数字题。缓存只观察回执轮。
 - 质量按题、计量按请求。历史一条题证据包含首轮和回执轮各自的请求 ID、HTTP；首轮失败没有回执轮。
   首轮与回执均进入正常网关用量；评分不把准备调用再当一个成功，不因无归属的传输错误给账号扣分。
-- 以 `accounts idle-probe history --scope <作用域>` 核对 `triggerType=automatic`、终态和 `requestEvidence` 的实际选题。
-  优先级由既有自动策略决定；已处于最末档的账号可能保持原值，不以探针直接改优先级。
+
+**换题自查清单**
+
+- 先确定所测能力。需要复现自定义工具错型时，用同模型、同题型比较异常账号与正常对照；普通函数成功不能替代自定义工具通过。
+- 仅首次启用的作用域先手动核对 HTTP、`ordinaryLogRecorded` 和轮次终态。只改已启用作用域的题型时，不为证明自动生效重跑手动轮次。
+- 从仓库根目录一次核对所有目标。`--since` 填此次切换时间，不用昨天的成功轮次验收今天的配置：
+
+  ```bash
+  bun skills/api2business/scripts/api2business-cli.ts accounts idle-probe verify \
+    --scope "$SCOPES" --since "$SWITCH_TIME" --over-api "$API_URL"
+  ```
+
+- 核验只读，不发送探针。每域取窗口内最新自动轮次：终态、实际题型和 HTTP 证据证明已执行。
+  `partial` 或 `failed` 可以证明题型已生效，不证明账号答对。跳过、无证据或混入旧题型均退出非零。
+  `--json` 给出轮次 ID、质量失败原因及回执轮缓存计数；没有回执轮不计为缓存未命中。
+- 只下钻未解释的异常作用域；用 `accounts idle-probe history --scope <域>` 查看终态明细。历史缺轮次时，用 worker 日志的 `operationId` 对齐活动错误。
+- 账号质量、评分与最终优先级分别回读。相对排名可能使扣分账号仍然提档；不手工降档，不新增调度规则，不从单个账号推断整个模型供应商。
 
 ## 配置收口与事故复盘
 
@@ -432,8 +447,7 @@
   - `upstream-scheduling-v2 scopes|plan --over-api <absolute-http(s)-URL>` 和
     `upstream-scheduling-v2 snapshot --scope <scope> --over-api <absolute-http(s)-URL>` 是只读核对入口；
     `planWrite=false` 时 plan 必须返回 `mutation=false`，不创建写入计划。
-  - 启用自动探活前，先用同一作用域显式执行一次手动探活，并核对 HTTP 结果、
-    `ordinaryLogRecorded` 和探活轮次记录；手动成功后才打开该作用域的 `idleProbe`。
+  - 首次启用或换题，见[自动空闲探活选题](#自动空闲探活选题)。
   - 探活候选必须按作用域平台和分组查询，模型白名单动态选择
     `sub2api.idleProbe.platformModels` 中的候选；Codex 默认按 `gpt-6.1-sol`、
     以 owning YAML 的 `platformModels.openai` 顺序为准，首选 `gpt-6.1-sol`；Grok 使用自己的模型目录。
@@ -908,8 +922,7 @@
 - 评分查询用探活 `requestId`/`clientRequestId` 把上述语义失败改记为可计分错误；成功探活用
   `ttftMs` 覆盖匹配 usage 的 `first_token_ms`，失败探活不产生 TTFT。完整耗时只保留为探活诊断，
   不进入可靠性或速度分。
-- 手动探活先验证 HTTP 结果、模型白名单、答案正确性、终态和轮次汇总，成功后才
-  打开该作用域的 `features.idleProbe`。
+- 首次启用的验收走[自动空闲探活选题](#自动空闲探活选题)。
 - 探活模型选择与成本补齐统一见本参考的作用域探活配置，不另维护候选顺序。
 - 生产调度由 Go Temporal worker 执行；评分、池分和优先级分保持独立，所有工作流均带有
   V2 作用域身份。

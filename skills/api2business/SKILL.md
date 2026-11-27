@@ -212,8 +212,8 @@ bun skills/api2business/scripts/api2business-cli.ts --config config/api2business
   通过原生 worker 执行一次指定作用域的手动优先级调整；作用域的
   `scoreRead`、`planRead`、`planWrite`、`priorityAutomation`、`idleProbe` 和
   `upstreamWrite` 只认 owning YAML；Codex、Claude、Grok、DeepSeek、Gemini 使用同一套平等作用域接口。
-  自动探活必须先完成同作用域的手动探活核验，再打开
-  `features.idleProbe`。V2 是唯一调度运行面；旧全局页面、工作流、写入 API、CLI 命令和
+  自动探活的首次启用、换题和跨域验收走[自动选题与验收清单](references/upstream-scheduling.md#自动空闲探活选题)。
+  V2 是唯一调度运行面；旧全局页面、工作流、写入 API、CLI 命令和
   配置字段已经删除，配置加载会拒绝这些退役字段，禁止兼容复活。
 - 作用域自动探活周期配置在
   `operations.upstreamSchedulingV2.scopes.<scope>.idleProbeIntervalSeconds`；未声明时才

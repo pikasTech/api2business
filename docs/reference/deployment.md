@@ -81,7 +81,7 @@ bun skills/api2business/scripts/api2business-cli.ts native start --component wor
 - 替换后必须 `native status --component all`、健康端点和 `deploy:verify` 三项同时通过。
 - 不要用 `native start` 在脏工作区重建；它会把未提交改动带进镜像。
 - 不要为发布新建第二个 compose 项目或改端口；镜像名、项目名和挂载必须指向唯一 L1。
-- 构建 worktree 结束后按[有界删除](devops-hygiene.md)清理，不删除主工作区改动。
+- 构建 worktree 结束后按 UniDesk 的[有界删除](https://github.com/pikasTech/unidesk/blob/master/docs/reference/devops-hygiene.md#有界删除)清理，不删除主工作区改动。
 
 ## Kubernetes
 

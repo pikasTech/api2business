@@ -58,17 +58,15 @@ bun skills/api2business/scripts/api2business-cli.ts accounts tool-probe --scope 
 [手动工具探针](upstream-scheduling.md#手动工具探针)。
 
 组合题用 `accounts combo-probe --scope <作用域> --accounts <账号> --mode mixed --json`。
-双普通函数对照用 `--mode functions`。失败只查看 `toolIssues`，不追加请求。
+双普通函数对照用 `--mode functions`。
 独立测一个标准工具用 `accounts tool-probe --scope <作用域> --accounts <账号> --mode exec --json`，也可指定 `submit_sum` 或 `submit_product`。
-所有单工具题均校验算术与回执；查 `cacheReadField`、`cacheReadTokens` 观察回执轮缓存。缓存为零或未知均不判错。
 
 ## 空闲探活
 
 - 探活账号范围、隔离分组、模型白名单、轮次终态和覆盖判定统一见
   [上游与调度](upstream-scheduling.md)；跨系统边界见 UniDesk 仓库的
   `.agents/skills/unidesk-sub2api/references/idle-probe-isolation.md`。
-- 每个作用域独立读取 owning YAML 的 `features.idleProbe`；当前 OpenAI/Codex 与 Grok
-  可分别启用，Claude 是否启用也只能由该作用域开关决定。
+- 切换与批量回读使用[自动选题与验收清单](upstream-scheduling.md#自动空闲探活选题)。
 - `accounts idle-probe plan` 只读，`accounts idle-probe reconcile` 只负责显式补齐隔离绑定，
   `accounts idle-probe run` 只执行 active 且 schedulable 的已就绪账号，不恢复异常账号；
   非默认作用域必须显式传 `--scope`。
@@ -83,8 +81,6 @@ bun skills/api2business/scripts/api2business-cli.ts accounts tool-probe --scope 
   `monitorBalance`。持久化 `funded=true` 只是历史写入证据，不能跳过实时余额检查。
 - 余额补充仍走 Sub2API 原生 admin API 并保留常规审计；补充后继续同一轮探活，
   不能把“余额已修复”单独当作探活成功，仍须核对专用 Key 用量、HTTP、答案和终态。
-- 自动探活前必须先完成同作用域的手动探活，并核对 HTTP、`ordinaryLogRecorded` 和轮次
-  终态；工作流 `running` 或 in-flight 跳过只表示并发保护，不是业务失败。
 - 探活请求进入普通用量和错误记录；覆盖必须按专用 Key 归因的账号级记录验收，不能用
   普通用户流量或轮次汇总替代。固定缓存前缀、缓存字段判定和零缓存保护见
   [上游与调度](upstream-scheduling.md)。
