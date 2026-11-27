@@ -222,6 +222,7 @@ export async function collectRechargeCandidates(
   config: AppConfig,
   store: OperationsStore,
   reads: Sub2ApiReadClient,
+  includeAll = false,
 ): Promise<Row> {
   const policy = config.operations.upstreamManagement.rechargeCandidates;
   const retiredSuppliers = new Set(policy.retiredSuppliers.map((value) => supplierIdentity(value)).filter((value): value is string => value !== null));
@@ -254,6 +255,7 @@ export async function collectRechargeCandidates(
       costRateCnyPerApiUsd: scored.usage && typeof scored.usage === "object" ? number(object(scored.usage).costRateCnyPerApiUsd) : null,
     }, retiredSuppliers);
   }).sort((left, right) => (number(right.recommendationScore) ?? 0) - (number(left.recommendationScore) ?? 0));
+  const candidates = includeAll ? accounts : accounts.slice(0, policy.recommendationLimit);
   return {
     ok: true, mode: "recharge-candidates-24h-before-anchor", lowBalanceThresholdCny: policy.lowBalanceCny,
     lookbackHours: policy.lookbackHours, candidateCount: accounts.length,
@@ -265,7 +267,10 @@ export async function collectRechargeCandidates(
     databaseQueries: 1, hostQuotaRows: walletRows.length,
     queueDurationMs: query.queueDurationMs, queryDurationMs: query.queryDurationMs,
     totalDurationMs: Math.round((performance.now() - startedAt) * 10) / 10,
-    candidates: accounts.slice(0, policy.recommendationLimit), valuesPrinted: false,
+    candidates,
+    displayLimit: policy.recommendationLimit,
+    omittedCandidateCount: Math.max(0, accounts.length - candidates.length),
+    valuesPrinted: false,
   };
 }
 

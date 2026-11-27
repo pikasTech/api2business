@@ -954,8 +954,8 @@ export class OperationsService {
     };
   }
 
-  async upstreamRechargeCandidates() {
-    return await collectRechargeCandidates(this.config, this.store, this.reads);
+  async upstreamRechargeCandidates(includeAll = false) {
+    return await collectRechargeCandidates(this.config, this.store, this.reads, includeAll);
   }
 
   async sampleOAuthRuntime(): Promise<Record<string, unknown>> {

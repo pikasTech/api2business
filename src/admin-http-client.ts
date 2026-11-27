@@ -236,7 +236,7 @@ export class AdminHttpClient {
     return this.request(`/api/upstreams/quota-monitor-usage?accountIds=${accountIds.join(",")}`, {}, 60000);
   }
   upstreamQuotaSummary(): Promise<Record<string, unknown>> { return this.request("/api/upstreams/quota-summary"); }
-  upstreamRechargeCandidates(): Promise<Record<string, unknown>> { return this.request("/api/upstreams/recharge-candidates"); }
+  upstreamRechargeCandidates(): Promise<Record<string, unknown>> { return this.request("/api/upstreams/recharge-candidates?all=true"); }
   oauthRuntimeSummary(profile: "codex" | "grok"): Promise<Record<string, unknown>> {
     return this.request(`/api/oauth/runtime-summary?profile=${profile}`);
   }
