@@ -303,6 +303,11 @@ export function operationHelp(args: string[]): Record<string, unknown> | null {
   const position = (first: string, second?: string): number => args.findIndex((item, index) => item === first && (second === undefined || args[index + 1] === second));
   const actionAfter = (start: number, actions: readonly string[]): string | undefined => args.slice(start + 1).find((item) => actions.includes(item));
   const idleProbe = position("accounts", "idle-probe");
+  if (position("accounts", "tool-probe") >= 0) return {
+    ok: true, command: "accounts tool-probe",
+    usage: "accounts tool-probe --scope codex --accounts <ids> [--model <id>] [--mode codex-custom|function] [--json]",
+    behavior: "L0 使用已就绪的隔离绑定。默认 codex-custom。每账号一题一个 qualityOk，不修改绑定、调度或评分。",
+  };
   if (idleProbe >= 0) return idleProbeHelp(actionAfter(idleProbe + 1, idleProbeActions));
   const quotaMonitorSample = position("upstreams", "quota-monitor");
   if (quotaMonitorSample >= 0 && args[quotaMonitorSample + 2] === "sample") return quotaMonitorSampleHelp();

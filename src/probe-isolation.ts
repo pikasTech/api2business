@@ -13,6 +13,7 @@ import {
 } from "./probe-math";
 import type { Paginated, Sub2ApiClient } from "./sub2api-client";
 import type { Sub2ApiRuntimeService } from "./sub2api-runtime-service";
+import { runToolProbe, type ToolProbeMode } from "./probe-tool";
 
 type Row = Record<string, unknown>;
 
@@ -789,6 +790,19 @@ export class ProbeIsolationService {
     if (scope && ((record.platform && record.platform !== scope.platform)
       || (!record.platform && scope.platform !== "openai"))) return null;
     return { accountId, groupId: record.groupId, keyCreated: false };
+  }
+
+  async toolProbe(accountId: number, model: string, mode: ToolProbeMode, timeoutMs: number) {
+    const stored = this.readFile().records[String(accountId)];
+    if (!stored || !readyRecord(stored) || (stored.platform && stored.platform !== "openai")) {
+      throw new Error(`账号 ${accountId} 缺少已就绪的 Codex 探活绑定`);
+    }
+    const signal = AbortSignal.timeout(timeoutMs);
+    return runToolProbe(model, mode, (body) => fetch(`${this.config.sub2api.idleProbe.isolation.gatewayBaseUrl}/responses`, {
+      method: "POST", redirect: "error", signal,
+      headers: { accept: "text/event-stream", "content-type": "application/json", authorization: `Bearer ${stored.apiKey}` },
+      body: JSON.stringify(body),
+    }));
   }
 
   async request(accountId: number, input: string, model: string, maxOutputTokens: number, timeoutMs: number): Promise<Record<string, unknown>> {

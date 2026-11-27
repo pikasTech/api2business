@@ -379,6 +379,7 @@ function help(): Record<string, unknown> {
       "accounts idle-probe reconcile [--accounts <id-or-range,...>] [--scope <configured-scope>] [--confirm] --over-api <absolute-http(s)-URL>",
       "accounts idle-probe run [--accounts <id-or-range,...>] [--scope <configured-scope>] [--rounds 1..10] [--confirm] --over-api <absolute-http(s)-URL>",
       "accounts math-probe --scope codex|claude|grok|deepseek|opencode|commandcode|gemini --accounts <id-or-range,...> [--model <id>] [--json] (L0 direct CLI; no service required)",
+      "accounts tool-probe --scope codex --accounts <id-or-range,...> [--model <id>] [--mode codex-custom|function] [--json] (L0 direct CLI)",
       "accounts lifecycle detect --day YYYY-MM-DD --plan-type k12|plus [--model <id>] [--confirm] --over-api <absolute-http(s)-URL>",
       "accounts lifecycle retire plan [--day YYYY-MM-DD] [--scope pool|day] [--plan-type k12|plus|team|free|all] [--selection dead|all] [--unit-cost-cny CNY] --over-api <absolute-http(s)-URL>",
       "accounts lifecycle retire status --id <plan-id> --over-api <absolute-http(s)-URL>",
@@ -1613,17 +1614,22 @@ function aggregateSmoke(): Record<string, unknown> {
   return { ok: Object.values(checks).every(Boolean), action: "account-score-aggregate-smoke", checks, mutation: false };
 }
 
-export async function runMathProbeL0(
+async function runAccountProbeL0(
   parsed: Parsed,
   config: ReturnType<typeof loadConfig>,
 ): Promise<Record<string, unknown>> {
   const scopeName = parsed.scope;
+  const tool = parsed.command[1] === "tool-probe";
+  const operation = tool ? "tool-probe" : "math-probe";
+  const mode = parsed.mode ?? "codex-custom";
+  if (tool && (scopeName !== "codex" || (mode !== "codex-custom" && mode !== "function"))) throw new Error("tool-probe requires --scope codex and --mode codex-custom|function");
+  if (parsed.overApi || parsed.targetId) throw new Error(`accounts ${operation} is L0 only; do not select a remote target`);
   if (scopeName !== "codex" && scopeName !== "claude" && scopeName !== "grok" && scopeName !== "deepseek" && scopeName !== "opencode" && scopeName !== "commandcode" && scopeName !== "gemini") {
     throw new Error("accounts math-probe requires --scope codex|claude|grok|deepseek|opencode|commandcode|gemini");
   }
-  if (!parsed.accounts) throw new Error("accounts math-probe requires --accounts");
+  if (!parsed.accounts) throw new Error(`accounts ${operation} requires --accounts`);
   const accountIds = parseAccountIdSelector(parsed.accounts);
-  if (accountIds.length === 0) throw new Error("accounts math-probe requires at least one positive account id");
+  if (accountIds.length === 0) throw new Error(`accounts ${operation} requires at least one positive account id`);
   const scope = config.operations.upstreamSchedulingV2?.scopes[scopeName];
   if (!scope || scope.enabled !== true) throw new Error(`scheduling scope ${scopeName} is not enabled`);
   const model = parsed.model
@@ -1652,11 +1658,13 @@ export async function runMathProbeL0(
         throw new Error(`account ${accountId} platform ${platform || "-"} does not match scope ${scopeName}/${scope.platform}`);
       }
       if (status !== "active" || account.schedulable !== true) {
-        throw new Error(`account ${accountId} must be active and schedulable before math probing`);
+        throw new Error(`account ${accountId} must be active and schedulable before ${operation}`);
       }
-      const binding = isolation.get(accountId, isolationScope)
-        ?? await isolation.ensure(accountId, isolationScope);
-      const response = await isolation.probe(accountId, model, config.sub2api.idleProbe.accountTimeoutMs, config.sub2api.idleProbe.reasoningEffort);
+      const binding = isolation.get(accountId, isolationScope) ?? (tool ? null : await isolation.ensure(accountId, isolationScope));
+      if (!binding) throw new Error(`账号 ${accountId} 缺少已就绪的 Codex 探活绑定`);
+      const response = tool
+        ? await isolation.toolProbe(accountId, model, mode === "function" ? mode : "codex-custom", config.sub2api.idleProbe.accountTimeoutMs)
+        : await isolation.probe(accountId, model, config.sub2api.idleProbe.accountTimeoutMs, config.sub2api.idleProbe.reasoningEffort);
       results.push({
         accountId,
         accountName: account.name ?? null,
@@ -1677,13 +1685,14 @@ export async function runMathProbeL0(
         model,
         ok: false,
         elapsedMs: Date.now() - startedAt,
+        ...(tool ? { response: { qualityOk: false, mode, stage: "setup", reason: "setup_failed", requestIds: [] } } : {}),
         error: error instanceof Error ? error.message : String(error),
       });
     }
   }
   return {
     ok: results.length > 0 && results.every((result) => result.ok === true),
-    action: "math-probe-l0",
+    action: `${operation}-l0`,
     transport: "direct-sub2api-isolated-user-key",
     servicesStarted: false,
     scope: scopeName,
@@ -1749,8 +1758,10 @@ export async function runCli(args: string[]): Promise<void> {
       refreshIntervalMinutes: config.monitor.refreshIntervalMinutes, recentCallLimit: config.monitor.recentCallLimit,
       automaticCreditEnabled: config.lottery.automaticCredit.enabled, valuesPrinted: false,
     }, parsed.json);
-    if (parsed.command.join(" ") === "accounts math-probe") {
-      return emit(await runMathProbeL0(parsed, config), parsed.json);
+    if (["accounts math-probe", "accounts tool-probe"].includes(parsed.command.join(" "))) {
+      const result = await runAccountProbeL0(parsed, config);
+      if (parsed.command[1] === "tool-probe" && !result.ok) process.exitCode = 1;
+      return emit(result, parsed.json);
     }
     if (parsed.command[0] === "bugteam" && !["purchase-import", "cost-monitor"].includes(parsed.command[1] ?? "")) {
       return emit(await bugTeamCommand(parsed, config), parsed.json);

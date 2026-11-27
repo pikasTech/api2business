@@ -45,6 +45,18 @@
 - 复活导入使用原账号冻结的代理设置，并跳过 OAuth 导入后的 API-key 上游切断联动。
 - 已完成下载但需要补导入时使用 `bugteam public-recovery import`，仍须指定一个现存 OAuth 账号作为复活锚点。
 
+## 手动选题
+
+从 Api2Business 仓库根目录运行，账号与模型替换为实际目标。两种命令都不需要启动服务。
+
+```bash
+bun skills/api2business/scripts/api2business-cli.ts accounts math-probe --scope codex --accounts 1496 --model gpt-6.1-sol --json
+bun skills/api2business/scripts/api2business-cli.ts accounts tool-probe --scope codex --accounts 1496 --model gpt-6.1-sol --mode codex-custom --json
+```
+
+普通 JSON 函数题用 `--mode function`。两种工具题的判据见
+[手动工具探针](upstream-scheduling.md#手动工具探针)。
+
 ## 空闲探活
 
 - 探活账号范围、隔离分组、模型白名单、轮次终态和覆盖判定统一见

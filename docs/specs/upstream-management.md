@@ -13,6 +13,12 @@
 - Codex、Claude、Grok、DeepSeek 和 Gemini 是平等作用域；作用域之间不得通过历史标签、URL 或混池结果
   互相推断账号归属。
 
+## 手动探针选题
+
+- 数字题与工具题按需独立触发。工具题每轮只出一个结果，不改变评分或调度。
+- 详细判据见[手动工具探针](../../skills/api2business/references/upstream-scheduling.md#手动工具探针)。
+- 操作入口见[账号操作](../../skills/api2business/references/account-operations.md#手动选题)。
+
 ## 转接 API-key 上游策略
 
 - 转接 API-key 上游的池模式与临时调度策略唯一由
