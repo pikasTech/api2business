@@ -61,7 +61,7 @@ func (a Activities) executeOperationHTTP(ctx context.Context, operation Operatio
 		Error       string `json:"error"`
 	}
 	if err := json.NewDecoder(res.Body).Decode(&envelope); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("worker operation HTTP %d: cannot decode response: %w", res.StatusCode, err)
 	}
 	if res.StatusCode < 200 || res.StatusCode >= 300 || !envelope.OK {
 		return nil, fmt.Errorf("worker operation HTTP %d: %s", res.StatusCode, envelope.Error)

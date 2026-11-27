@@ -78,6 +78,7 @@ test("a unique unqualified custom call still needs the correct receipt", async (
 test("stream must complete, identity must agree with done events", async () => {
   await expect(readToolTurn(new Response("data: [DONE]\n\n"))).rejects.toThrow("missing_terminal");
   await expect(readToolTurn(new Response(null, { status: 429 }))).rejects.toThrow("http_429");
+  await expect(readToolTurn(new Response(null))).rejects.toThrow('missing_response_body');
   const done = 'data: {"type":"response.output_item.done","item":{"type":"function_call"}}\n\n';
   await expect(readToolTurn(new Response(done + await complete([{ type: "custom_tool_call" }]).text()))).rejects.toThrow("stream_item_mismatch");
 });

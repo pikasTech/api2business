@@ -153,11 +153,14 @@ export function quotaMonitorSampleHelp(): Record<string, unknown> {
   };
 }
 
-const idleProbeActions = ["plan", "history", "coverage", "reconcile", "run"] as const;
+const idleProbeActions = ["plan", "history", "verify", "coverage", "reconcile", "run"] as const;
 
 export function idleProbeHelp(action?: string): Record<string, unknown> {
   const selected = action && idleProbeActions.includes(action as typeof idleProbeActions[number]) ? action : null;
   if (action && !selected && action !== "--help") throw new Error(`unknown accounts idle-probe action ${action}`);
+  if (selected === 'verify') return { ok: true, command: 'accounts idle-probe verify',
+    usage: `${entry} --config <owning-YAML> accounts idle-probe verify --scope <scope,...> --since <ISO-with-timezone> --over-api <absolute-http(s)-URL> [--json]`,
+    behavior: '按作用域只读核对切换后最新自动轮次。不发探针、不调整优先级。', verification: '以终态、实际题型和 HTTP 证据判定生效；账号答错仍显示失败原因。任一作用域证据不足退出非零。' };
   const usageSuffix = selected === "history"
     ? "[--scope <configured-scope>] [--page N]"
     : selected === "coverage"
@@ -168,7 +171,7 @@ export function idleProbeHelp(action?: string): Record<string, unknown> {
           ? "[--accounts <id-or-range,...>] [--scope <configured-scope>] [--rounds 1..10] [--confirm]"
           : selected === "plan"
             ? "[--accounts <id-or-range,...>] [--scope <configured-scope>]"
-            : "plan|history|coverage|reconcile|run [options]";
+            : `${idleProbeActions.join('|')} [options]`;
   const options: Record<string, string> = {
     "--config": configOption,
     "--over-api": overApiOption,
@@ -182,7 +185,7 @@ export function idleProbeHelp(action?: string): Record<string, unknown> {
   if (selected === "coverage" || selected === null) options["--window-minutes"] = "可选；正整数覆盖窗口，省略为 20 分钟；生产核对同时查看 24 小时窗口";
   if (selected === "run" || selected === null) options["--rounds"] = "可选；1 到 10 的整数，省略为 1";
   if (selected === "reconcile" || selected === "run" || selected === null) options["--confirm"] = "写入确认；省略时只返回预览并设置 mutation=false";
-  const usageAction = selected ?? "plan|history|coverage|reconcile|run";
+  const usageAction = selected ?? idleProbeActions.join('|');
   const usageTail = selected ? usageSuffix : "[options]";
   return {
     ok: true,

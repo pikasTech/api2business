@@ -29,6 +29,7 @@ import { parseAccountIdSelector } from "../../../../src/account-batch-economics"
 import { runBoundedProcess } from "../../../../src/bounded-process";
 import { readSecret } from "../../../../src/secrets";
 import { runAccountProbeL0 } from "./account-probe-l0";
+import { printProbeVerification, verifyIdleProbes } from "./verify-idle-probes";
 import { balanceNumber } from "../../../../static/balance-format.js";
 import { BugTeamClient } from "./bugteam-client";
 import { PublicRecoveryClient } from "./public-recovery-client";
@@ -375,6 +376,7 @@ function help(): Record<string, unknown> {
       "accounts oauth-runtime [--profile codex|grok] [--over-api <absolute-http(s)-URL>]",
       "accounts oauth-runtime-sample --over-api <absolute-http(s)-URL>",
       "accounts idle-probe plan [--accounts <id-or-range,...>] [--scope <configured-scope>] --over-api <absolute-http(s)-URL>",
+      "accounts idle-probe verify --scope <scope,...> --since <ISO> --over-api <absolute-http(s)-URL>",
       "accounts idle-probe history [--scope <configured-scope>] [--page N] --over-api <absolute-http(s)-URL>",
       "accounts idle-probe coverage [--scope <configured-scope>] [--window-minutes N] --over-api <absolute-http(s)-URL>",
       "accounts idle-probe reconcile [--accounts <id-or-range,...>] [--scope <configured-scope>] [--confirm] --over-api <absolute-http(s)-URL>",
@@ -1296,6 +1298,7 @@ async function remote(parsed: Parsed, config: ReturnType<typeof loadConfig>, tar
   if (group === "accounts" && action === "idle-probe") {
     const verb = parsed.command[2];
     const accountIds = parsed.accounts ? parseAccountIdSelector(parsed.accounts) : [];
+    if (verb === 'verify') return verifyIdleProbes(client, config, parsed.scope, parsed.since);
     if (verb === "plan") return await client.idleProbePlan(accountIds, parsed.scope);
     if (verb === "history") return await client.idleProbeHistory(parsed.page ?? 1, parsed.scope);
     if (verb === "coverage") return await client.idleProbeCoverage(parsed.windowMinutes ?? 20, parsed.scope);
@@ -1324,7 +1327,7 @@ async function remote(parsed: Parsed, config: ReturnType<typeof loadConfig>, tar
       };
       return await client.idleProbeRun(accountIds, rounds, parsed.scope);
     }
-    throw new Error("accounts idle-probe requires plan, history, reconcile, or run");
+    throw new Error("accounts idle-probe requires plan, history, verify, coverage, reconcile, or run");
   }
   if (group === "accounts" && action === "delete") {
     if (!parsed.accounts) throw new Error("accounts delete requires --accounts");
@@ -1673,7 +1676,7 @@ export async function runCli(args: string[]): Promise<void> {
     }, parsed.json);
     if (["accounts math-probe", "accounts tool-probe", "accounts combo-probe"].includes(parsed.command.join(" "))) {
       const result = await runAccountProbeL0(parsed, config);
-      if (parsed.command[1] !== "math-probe" && !result.ok) process.exitCode = 1;
+      if (!result.ok) process.exitCode = 1;
       return emit(result, parsed.json);
     }
     if (parsed.command[0] === "bugteam" && !["purchase-import", "cost-monitor"].includes(parsed.command[1] ?? "")) {
@@ -1698,6 +1701,7 @@ export async function runCli(args: string[]): Promise<void> {
     }
     const nativeReadCommand = (
       parsed.command[0] === "gateway" ||
+      parsed.command.join(' ') === 'accounts idle-probe verify' ||
       parsed.command.join(" ") === "scores rank"
       || parsed.command[0] === "upstream-scheduling-v2"
       || parsed.command[0] === "observability"
@@ -1733,7 +1737,9 @@ export async function runCli(args: string[]): Promise<void> {
     const result = target.mode === "embedded" ? await embedded(parsed, config, target) : await remote(parsed, config, target);
     const routedResult = target.mode === "http" ? bindRuntimeCommands(result, target.baseUrl) : result;
     const output: Record<string, unknown> = { target: targetId, canonicalUrl: target.mode === "http" ? target.baseUrl : null, transport: target.mode === "embedded" ? "local-dispatcher" : "http", ...routedResult as Record<string, unknown> };
+    if (parsed.command.join(' ') === 'accounts idle-probe verify' && !output.ok) process.exitCode = 1;
     if (parsed.command.join(" ") === "scores rank") emitScoreRanking(output, parsed.json);
+    else if (parsed.command.join(' ') === 'accounts idle-probe verify' && !parsed.json) printProbeVerification(output);
     else if (parsed.command.join(" ") === "priority history") emitPriorityHistory(output, parsed.json, parsed.scope);
     else if (parsed.command.join(" ") === "scores pool-quality") emitPoolQuality(output, parsed.json);
     else if (parsed.command.join(" ") === "errors aggregate") emitErrorAggregate(output, parsed.json);

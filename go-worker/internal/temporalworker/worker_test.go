@@ -1,9 +1,11 @@
 package temporalworker
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -14,6 +16,7 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	sdkactivity "go.temporal.io/sdk/activity"
+	sdklog "go.temporal.io/sdk/log"
 	"go.temporal.io/sdk/testsuite"
 )
 
@@ -332,6 +335,26 @@ func TestOperationWorkflowPropagatesCancellation(t *testing.T) {
 	})
 	if environment.GetWorkflowError() == nil {
 		t.Fatal("expected workflow cancellation")
+	}
+}
+
+func TestIdleProbeActivityFailureIsVisibleWithoutHaltingSchedule(t *testing.T) {
+	var suite testsuite.WorkflowTestSuite
+	var output bytes.Buffer
+	suite.SetLogger(sdklog.NewStructuredLogger(slog.New(slog.NewTextHandler(&output, nil))))
+	environment := suite.NewTestWorkflowEnvironment()
+	attempts := 0
+	environment.RegisterActivityWithOptions(func(context.Context, OperationRequest) (any, error) {
+		attempts++
+		if attempts == 1 {
+			return nil, errors.New("worker operation HTTP 502: upstream unavailable")
+		}
+		return nil, nil
+	}, sdkactivity.RegisterOptions{Name: "executeOperation"})
+	environment.RegisterDelayedCallback(environment.CancelWorkflow, 1500*time.Millisecond)
+	environment.ExecuteWorkflow(UpstreamSchedulingV2IdleProbeScheduleWorkflow, ScheduleInput{IntervalMS: 1000, RoundTimeoutMS: 1000, Scope: "codex"})
+	if attempts != 2 || !strings.Contains(output.String(), "Idle probe activity failed") || !strings.Contains(output.String(), "scope=codex") || !strings.Contains(output.String(), "HTTP 502") || !strings.Contains(output.String(), ":idle-probe:0") {
+		t.Fatalf("attempts=%d log=%s", attempts, output.String())
 	}
 }
 

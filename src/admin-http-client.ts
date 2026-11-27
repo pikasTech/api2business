@@ -34,7 +34,12 @@ export class AdminHttpClient {
       const message = error instanceof Error ? error.message : String(error);
       throw new Error(`Api2Business API transport failed for ${path}: ${message}`, { cause: error });
     }
-    const payload = await response.json().catch(() => null) as { ok?: boolean; error?: string } | null;
+    let payload: { ok?: boolean; error?: string } | null;
+    try {
+      payload = await response.json();
+    } catch (cause) {
+      throw new Error(`Api2Business API ${path} returned HTTP ${response.status}: ${cause instanceof SyntaxError ? 'invalid JSON' : 'response read failed'}`, { cause });
+    }
     if (!response.ok || !payload) {
       const detail = payload?.error ? `: ${payload.error}` : "";
       throw new Error(`Api2Business API ${path} returned HTTP ${response.status}${detail}`);

@@ -5,10 +5,11 @@ export class ToolProbeError extends Error {
 }
 
 export async function readProbeBody(response: Response): Promise<string> {
-  if (!response.ok || !response.body) {
+  if (!response.ok) {
     await response.body?.cancel();
     throw new ToolProbeError(`http_${response.status}`);
   }
+  if (!response.body) throw new ToolProbeError('missing_response_body');
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let body = "";

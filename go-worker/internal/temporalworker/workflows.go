@@ -1,6 +1,7 @@
 package temporalworker
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -220,7 +221,21 @@ func UpstreamSchedulingV2IdleProbeScheduleWorkflow(ctx workflow.Context, input S
 		if input.Scope != "" {
 			request.Command["scope"] = input.Scope
 		}
-		_ = workflow.ExecuteActivity(ctx, "executeOperation", request).Get(ctx, nil)
+		if err := workflow.ExecuteActivity(ctx, "executeOperation", request).Get(ctx, nil); err != nil {
+			cause := errors.Unwrap(err)
+			reason := fmt.Sprintf("%T", cause)
+			var timeout *temporal.TimeoutError
+			var application *temporal.ApplicationError
+			if errors.As(err, &timeout) {
+				reason = timeout.TimeoutType().String()
+			} else if errors.As(err, &application) {
+				var status int
+				if _, scanErr := fmt.Sscanf(application.Message(), "worker operation HTTP %d:", &status); scanErr == nil && status >= 100 && status <= 599 {
+					reason = fmt.Sprintf("HTTP %d", status)
+				}
+			}
+			workflow.GetLogger(ctx).Warn("Idle probe activity failed", "operationId", request.OperationID, "scope", input.Scope, "reason", reason)
+		}
 		if err := workflow.Sleep(ctx, time.Duration(input.IntervalMS)*time.Millisecond); err != nil {
 			return err
 		}
