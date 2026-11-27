@@ -6,6 +6,14 @@ import { Sub2ApiClient } from "../../../../src/sub2api-client";
 import { Sub2ApiRuntimeService } from "../../../../src/sub2api-runtime-service";
 import type { parseArgs } from "./cli";
 
+const ACCOUNT_PROBE_SCOPES = ["codex", "claude", "grok", "deepseek", "opencode", "commandcode", "gemini"] as const;
+
+export function assertAccountProbeScope(operation: string | undefined, scopeName: string): void {
+  if (!ACCOUNT_PROBE_SCOPES.includes(scopeName as typeof ACCOUNT_PROBE_SCOPES[number])) {
+    throw new Error(`accounts ${operation} does not support scope ${scopeName}`);
+  }
+}
+
 export async function runAccountProbeL0(
   parsed: ReturnType<typeof parseArgs>,
   config: AppConfig,
@@ -21,7 +29,7 @@ export async function runAccountProbeL0(
   if (tool && !single && (scopeName !== "codex" || (mode !== "codex-custom" && mode !== "function"))) throw new Error("tool-probe requires --mode exec|submit_sum|submit_product; codex also supports codex-custom|function");
   if (parsed.overApi || parsed.targetId) throw new Error(`accounts ${operation} is L0 only; do not select a remote target`);
   if (!scopeName) throw new Error(`accounts ${operation} requires --scope`);
-  if (!standardMode && !["codex", "claude", "grok", "deepseek", "opencode", "commandcode", "gemini"].includes(scopeName)) throw new Error(`accounts ${operation} does not support scope ${scopeName}`);
+  if (!standardMode) assertAccountProbeScope(operation, scopeName);
   if (!parsed.accounts) throw new Error(`accounts ${operation} requires --accounts`);
   const accountIds = parseAccountIdSelector(parsed.accounts);
   if (accountIds.length === 0) throw new Error(`accounts ${operation} requires at least one positive account id`);
