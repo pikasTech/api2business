@@ -11,6 +11,15 @@ type Row = Record<string, unknown>;
 
 const RESPONSE_EVIDENCE_LIMIT = 512;
 
+function probePredicateSql(apiKeyName: string, userEmail: string, groupName: string): string {
+  return `(
+    LOWER(COALESCE(${apiKeyName}, '')) LIKE 'api2business-probe-%'
+    OR LOWER(COALESCE(${userEmail}, '')) LIKE 'api2business-probe-%@%'
+    OR LOWER(COALESCE(${userEmail}, '')) = 'monitor-user@sub2api.platform-infra.local'
+    OR LOWER(COALESCE(${groupName}, '')) LIKE 'api2business-probe-%'
+  )`;
+}
+
 function sanitizeResponseEvidence(value: unknown): string | null {
   const raw = String(value ?? "").trim();
   if (!raw) return null;
@@ -165,26 +174,34 @@ const projectionColumnsSql = `
   END AS category,
   recovered,
   failover_observed,
-  (
-    LOWER(COALESCE(api_key_name, '')) LIKE 'api2business-probe-%'
-    OR LOWER(COALESCE(user_email, '')) LIKE 'api2business-probe-%@%'
-    OR LOWER(COALESCE(user_email, '')) = 'monitor-user@sub2api.platform-infra.local'
-    OR LOWER(COALESCE(group_name, '')) LIKE 'api2business-probe-%'
-  ) AS probe,
+  ${probePredicateSql("api_key_name", "user_email", "group_name")} AS probe,
   created_at,
   ${stablePhraseSql} AS stable_phrases
 `;
 
-const errorListSql = `
-WITH selected_errors AS MATERIALIZED (
-  SELECT o.*, COALESCE(o.request_id, 'error:' || o.id::text) AS request_key
+const candidateErrorsSql = `
+candidate_errors AS MATERIALIZED (
+  SELECT
+    o.*,
+    COALESCE(o.request_id, 'error:' || o.id::text) AS request_key,
+    ${probePredicateSql("probe_key.name", "probe_owner.email", "probe_group.name")} AS probe
   FROM ops_error_logs o
+  LEFT JOIN api_keys probe_key ON probe_key.id = o.api_key_id
+  LEFT JOIN users probe_owner ON probe_owner.id = o.user_id
+  LEFT JOIN groups probe_group ON probe_group.id = o.group_id
   WHERE (COALESCE(o.status_code, 0) >= 400
     OR COALESCE(o.upstream_status_code, 0) >= 400
     OR o.error_type = 'cyber_policy')
     AND ($2::timestamptz IS NULL OR o.created_at >= $2::timestamptz)
     AND ($3::timestamptz IS NULL OR o.created_at < $3::timestamptz)
-  ORDER BY o.created_at DESC, o.id DESC
+)`;
+
+const errorListSql = `
+WITH ${candidateErrorsSql}, selected_errors AS MATERIALIZED (
+  SELECT *
+  FROM candidate_errors
+  WHERE NOT probe
+  ORDER BY created_at DESC, id DESC
   LIMIT $1
 ), usage_recovery_keys AS MATERIALIZED (
   SELECT DISTINCT e.request_key
@@ -253,6 +270,13 @@ WITH selected_errors AS MATERIALIZED (
 SELECT ${projectionColumnsSql}
 FROM enriched
 ORDER BY created_at DESC, id DESC
+`;
+
+export const errorProbeCountQuery = `
+WITH ${candidateErrorsSql}
+SELECT COUNT(*)::int AS probe_rows_excluded
+FROM candidate_errors
+WHERE probe
 `;
 
 const errorGetSql = `
@@ -384,22 +408,29 @@ export async function collectErrorListFromDatabase(
     [limit, start, end],
     priority,
   );
+  const probeResult = await query(
+    reads,
+    JSON.stringify(["errors.list.probe-count", start, end]),
+    "errors.list",
+    errorProbeCountQuery,
+    [limit, start, end],
+    priority,
+  );
   return {
     ok: true,
     mode: "error-list-postgresql",
     limit,
     timezone: config.monitor.timezone,
-    databaseQueries: result.cached ? 0 : 1,
-    queueDurationMs: result.queueDurationMs,
-    queryDurationMs: result.queryDurationMs,
+    databaseQueries: (result.cached ? 0 : 1) + (probeResult.cached ? 0 : 1),
+    queueDurationMs: result.queueDurationMs + probeResult.queueDurationMs,
+    queryDurationMs: result.queryDurationMs + probeResult.queryDurationMs,
     totalDurationMs: Math.round((performance.now() - startedAt) * 10) / 10,
     queryStartedAt: result.queryStartedAt,
     queryCompletedAt: result.queryCompletedAt,
     deduplicated: result.deduplicated,
     cached: result.cached,
-    probeRowsExcluded: result.rows.filter((row) => row.probe === true).length,
+    probeRowsExcluded: integer(probeResult.rows[0]?.probe_rows_excluded) ?? 0,
     records: result.rows
-      .filter((row) => row.probe !== true)
       .map((row) => projectErrorDetailRow(row, config.monitor.timezone)),
     valuesPrinted: false,
   };

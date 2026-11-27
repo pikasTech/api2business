@@ -1,13 +1,15 @@
 import { expect, test } from "bun:test";
-import { errorGetQuery, errorListQuery, projectErrorDetailRow } from "./error-detail-database";
+import { errorGetQuery, errorListQuery, errorProbeCountQuery, projectErrorDetailRow } from "./error-detail-database";
 
 test("error detail queries are bounded and request scoped", () => {
   expect(errorListQuery).toContain("LIMIT $1");
+  expect(errorListQuery).toContain("candidate_errors AS MATERIALIZED");
   expect(errorListQuery).toContain("selected_errors AS MATERIALIZED");
+  expect(errorListQuery).toContain("WHERE NOT probe");
   expect(errorListQuery).toContain("usage_recovery_keys AS MATERIALIZED");
   expect(errorListQuery).toContain("terminal_policy_keys AS MATERIALIZED");
   expect(errorListQuery).toContain("system_log_evidence AS MATERIALIZED");
-  expect(errorListQuery).toContain("ORDER BY o.created_at DESC, o.id DESC");
+  expect(errorListQuery).toContain("ORDER BY created_at DESC, id DESC");
   expect(errorListQuery).not.toContain("OR success.request_id IN");
   expect(errorListQuery).not.toContain("WHERE (COALESCE(status_code, 0) >= 400");
   expect(errorListQuery).not.toContain("COALESCE(is_business_limited, false) = false");
@@ -24,6 +26,8 @@ test("error detail queries are bounded and request scoped", () => {
   expect(errorGetQuery).toContain("insufficient account balance");
   expect(errorGetQuery).toContain("error_phase");
   expect(errorListQuery).not.toContain("SET TRANSACTION READ ONLY");
+  expect(errorProbeCountQuery).toContain("COUNT(*)::int AS probe_rows_excluded");
+  expect(errorProbeCountQuery).toContain("WHERE probe");
 });
 
 test("error detail projection masks identity and excludes bodies", () => {
