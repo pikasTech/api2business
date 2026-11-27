@@ -8,19 +8,19 @@ const nativeComponents: NativeServiceId[] = ["api", "worker", "web"];
 export const COMPOSE_UP_TIMEOUT_MS = 600_000;
 export const COMPOSE_READ_TIMEOUT_MS = 120_000;
 
-function composeArgs(config: AppConfig, action: string, component?: NativeServiceId): string[] {
+function composeArgs(config: AppConfig, action: string, component?: NativeServiceId, noBuild = false): string[] {
   const n = config.runtime.native;
   const args = ["compose", "--project-name", n.composeProject, "--file", resolve(config.rootDirectory, n.composeFile), "--env-file", resolve(config.rootDirectory, n.composeEnvFile), action];
   if (action === "up") {
-    args.push("--detach", "--build");
+    args.push("--detach", noBuild ? "--no-build" : "--build");
     if (component) args.push("--no-deps");
   }
   if (component) args.push(component);
   return args;
 }
 
-function composeRun(config: AppConfig, action: string, component?: NativeServiceId, tail = 40): Record<string, unknown> {
-  if (action === "up") {
+function composeRun(config: AppConfig, action: string, component?: NativeServiceId, tail = 40, noBuild = false): Record<string, unknown> {
+  if (action === "up" && !noBuild) {
     const ledgerDirectory = dirname(config.operations.accountImportLedgerPath);
     mkdirSync(ledgerDirectory, { recursive: true, mode: 0o700 });
     chmodSync(ledgerDirectory, 0o700);
@@ -42,7 +42,7 @@ function composeRun(config: AppConfig, action: string, component?: NativeService
     writeFileSync(envPath, `${lines.join("\n")}\n`, { encoding: "utf8", mode: 0o600 });
     chmodSync(envPath, 0o600);
   }
-  const args = composeArgs(config, action, component);
+  const args = composeArgs(config, action, component, noBuild);
   if (action === "logs") args.push("--tail", String(tail));
   const result = spawnSync("docker", args, {
     cwd: config.rootDirectory,
@@ -123,8 +123,10 @@ export function nativeStart(
   config: AppConfig,
   component: NativeServiceId,
   preparedEnvironment?: Record<string, string>,
+  noBuild = false,
 ): Record<string, unknown> {
-  if (config.runtime.native.mode === "docker-compose") return composeRun(config, "up", component);
+  if (config.runtime.native.mode === "docker-compose") return composeRun(config, "up", component, 40, noBuild);
+  if (noBuild) throw new Error('--no-build requires the docker-compose runtime');
   const current = nativeStatus(config, component);
   if (current.state === "running") return { ...current, mutation: false, reason: "already-running" };
   const env = preparedEnvironment ?? nativeEnvironment(config, component);
@@ -173,10 +175,11 @@ export function nativeAll(
   config: AppConfig,
   action: "start" | "stop" | "status" | "logs",
   tail = 40,
+  noBuild = false,
 ): Record<string, unknown> {
   const components = action === "stop" ? [...nativeComponents].reverse() : nativeComponents;
   const results = components.map((component) =>
-    action === "start" ? nativeStart(config, component)
+    action === "start" ? nativeStart(config, component, undefined, noBuild)
       : action === "stop" ? nativeStop(config, component)
         : action === "status" ? nativeStatus(config, component)
           : nativeLogs(config, component, tail)
