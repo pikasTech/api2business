@@ -219,6 +219,7 @@ export function parseArgs(args: string[]): Parsed {
   const optionNames = new Set(["--over-api", "--config", "--target", "--id", "--request-id", "--limit", "--top", "--draws", "--component", "--tail", "--calls", "--days", "--account", "--accounts", "--group", "--start", "--end", "--since", "--until", "--day", "--period", "--cost-cny", "--unit-cost-cny", "--amount-cny", "--direction", "--category", "--description", "--plan-type", "--scope", "--selection", "--profile", "--session-ttl-seconds", "--burst-count", "--burst-interval", "--manifest", "--click-selector", "--selector", "--model", "--file", "--output", "--priority", "--capacity", "--rate-multiplier", "--groups", "--proxy-id", "--external-costs-json", "--base-url", "--mode", "--account-id", "--stage", "--suffix", "--rate", "--recharge-cny", "--remaining-usd", "--rounds", "--window-minutes", "--page", "--search", "--product", "--quantity", "--format", "--hub-id", "--state", "--before-id", "--idempotency-key", "--platform", "--pool-mode", "--upstream-model"]);
   const flags = new Set(["--confirm", "--include-records", "--json", "--cache-only", "--refresh", "--affected-only", "--api-key-stdin", "--template-only", "--ticket-stdin", "--code-stdin", "--card-code-stdin", "--full-page"]);
   const command: string[] = [];
+  flags.add('--no-build');
   for (let index = 0; index < args.length; index += 1) {
     const item = args[index]!;
     if (optionNames.has(item)) { index += 1; continue; }
@@ -229,6 +230,7 @@ export function parseArgs(args: string[]): Parsed {
   if (command.join(" ") === "scores rank" && value(args, "--scope") !== null) {
     throw new Error("scores rank 不支持 --scope；请改用 --group/--account，或用 upstream-scheduling-v2 snapshot --scope <scope>");
   }
+  if (args.includes('--no-build') && command.join(' ') !== 'native start') throw new Error('--no-build requires native start');
   const integer = (name: string): number | null => {
     const raw = value(args, name);
     if (raw === null) return null;
@@ -416,7 +418,7 @@ function help(): Record<string, unknown> {
       "bugteam public-recovery import --account-id <原OAuth账号ID> --file <已下载JSON> --plan-type <type> --confirm（保留原账号并创建复活副本，固定按 ¥0.01 记账）",
       "bugteam public-recovery status|logs|continue|retry --id <job-id> [--stage health|reclaim|status|download|import-submit|import-status|verify] [--card-code-stdin] [--confirm]",
       "bugteam purchase-import options|create --quantity N [--priority 1 --capacity 16 --rate-multiplier 1000 --groups 2,3 --proxy-id 0] [--confirm] --over-api <absolute-http(s)-URL>|status --id <job-id> --over-api <absolute-http(s)-URL>",
-      "native start|stop|status|logs [--component all|api|worker|web] [--tail N]",
+      "native start|stop|status|logs [--component all|api|worker|web] [--tail N] [--no-build for start]",
     ],
     output: "k8s-style text by default; add --json for machine output",
   };
@@ -1680,13 +1682,15 @@ export async function runCli(args: string[]): Promise<void> {
     if (parsed.command.join(" ") === "scores aggregate-smoke") return emit(aggregateSmoke(), parsed.json);
     if (parsed.command[0] === "native") {
       const action = parsed.command[1];
+      const noBuild = args.includes('--no-build');
+      if (noBuild && action !== 'start') throw new Error('--no-build requires native start');
       if (action !== "start" && action !== "stop" && action !== "status" && action !== "logs") {
         throw new Error(`unknown native action ${action ?? ""}`);
       }
       if (parsed.component === null || parsed.component === "all") {
-        return emit(nativeAll(config, action, parsed.tail ?? 40), parsed.json);
+        return emit(nativeAll(config, action, parsed.tail ?? 40, noBuild), parsed.json);
       }
-      const result = action === "start" ? nativeStart(config, parsed.component)
+      const result = action === "start" ? nativeStart(config, parsed.component, undefined, noBuild)
         : action === "stop" ? nativeStop(config, parsed.component)
         : action === "status" ? nativeStatus(config, parsed.component)
         : nativeLogs(config, parsed.component, parsed.tail ?? 40);

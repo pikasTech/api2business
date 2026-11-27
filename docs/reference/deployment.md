@@ -74,8 +74,8 @@ docker compose --project-name api2business-l1 --file compose.yaml \
   --env-file .state/compose/api2business.env build api worker
 
 # 2. 回到主工作区，用同一项目名和同一 compose 文件替换服务，不重新构建
-docker compose --project-name api2business-l1 --file compose.yaml \
-  --env-file .state/compose/api2business.env up -d --no-build api worker
+bun skills/api2business/scripts/api2business-cli.ts native start --component api --no-build
+bun skills/api2business/scripts/api2business-cli.ts native start --component worker --no-build
 ```
 
 - 替换后必须 `native status --component all`、健康端点和 `deploy:verify` 三项同时通过。
