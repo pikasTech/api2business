@@ -302,10 +302,11 @@ test("usage target discovery uses one queued database read", async () => {
       status() { throw new Error("not used"); },
     } as unknown as Sub2ApiReadClient;
     const service = new UpstreamManagementService(config, reads);
-    const result = await service.usage([8]);
+    const result = await service.usage([8, 9]);
     expect(databaseQueries).toBe(1);
     expect(result.databaseQueries).toBe(1);
     expect(result.targetCount).toBe(1);
+    expect(result.unresolvedRequestedAccountIds).toEqual([9]);
     expect(JSON.stringify(result)).not.toContain("sk-secret");
   } finally {
     globalThis.fetch = originalFetch;

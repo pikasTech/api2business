@@ -1227,10 +1227,12 @@ export class UpstreamManagementService {
     });
     let queriedIndex = 0;
     const results = prepared.map((item) => item.failure ?? queried[queriedIndex++]!);
+    const resolvedAccountIds = new Set(query.rows.map((item) => Number(item.id)));
     return {
       ok: true,
       operation: "usage",
       requestedAccountIds: accountIds,
+      unresolvedRequestedAccountIds: accountIds.filter((accountId) => !resolvedAccountIds.has(accountId)),
       targetCount: query.rows.length,
       succeeded: results.filter((result) => result.ok).length,
       failed: results.filter((result) => !result.ok).length,
