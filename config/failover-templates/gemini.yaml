@@ -7,6 +7,7 @@ rules:
   keywords:
   - invalid_request_error
   - invalid model
+  - The request could not be processed. Please check the request parameters.
   durationMinutes: 3
   description: Gemini 上游明确拒绝请求参数或模型时短暂冷却并切号
 - errorCode: 401
@@ -72,8 +73,9 @@ rules:
   - upstream service temporarily unavailable
   - stream disconnected
   - 'error code: 502'
+  - is not supported by any configured account in this group
   durationMinutes: 3
-  description: Gemini 上游网关或流式响应故障
+  description: Gemini 上游网关、流式响应或包装层模型路由故障
 - errorCode: 503
   keywords:
   - service unavailable

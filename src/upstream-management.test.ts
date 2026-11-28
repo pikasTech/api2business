@@ -718,9 +718,11 @@ test("keeps Codex and Claude templates as separate platform files", () => {
     rule.error_code === status && rule.keywords.some((keyword) =>
       JSON.stringify(body).toLowerCase().includes(keyword.toLowerCase())));
   expect(matchGemini(404, { error: { message: "Model gemini-4-argon is not available" } })?.duration_minutes).toBe(3);
+  expect(matchGemini(400, { error: { code: 400, message: "The request could not be processed. Please check the request parameters." } })?.duration_minutes).toBe(3);
   expect(matchGemini(429, { error: { status: "RESOURCE_EXHAUSTED", message: "Too many requests. Please retry later." } })?.duration_minutes).toBe(3);
   expect(matchGemini(429, "RESOURCE_EXHAUSTED")?.duration_minutes).toBe(3);
   expect(matchGemini(502, "error code: 502")?.duration_minutes).toBe(3);
+  expect(matchGemini(502, { error: { code: 404, message: 'Model "gemini-4-argon" is not supported by any configured account in this group' } })?.duration_minutes).toBe(3);
   expect(matchGemini(503, { error: { message: "No available Gemini accounts: no available accounts" } })?.duration_minutes).toBe(3);
   expect(parsed.operations.upstreamManagement.templateFiles).toEqual({
     codex: "config/failover-templates/codex.yaml",
