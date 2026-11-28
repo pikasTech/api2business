@@ -65,12 +65,20 @@ export class AccountScoreService {
     if (!this.config.monitor.recentCallOptions.includes(recentCallLimit)) {
       throw new Error(`recentCallLimit must be one of: ${this.config.monitor.recentCallOptions.join(", ")}`);
     }
-    await this.refresh(recentCallLimit, "manual");
+    let refreshError: string | null = null;
+    try {
+      await this.refresh(recentCallLimit, "manual");
+    } catch (error) {
+      const latest = await this.state();
+      if (latest.refreshedAt === null) throw error;
+      refreshError = error instanceof Error ? error.message : String(error);
+    }
     const snapshot = await this.state();
     const accounts = this.selectAccounts(snapshot.accounts, accountSelector, groupSelector);
     return {
       ...snapshot,
       ok: snapshot.refreshedAt !== null,
+      status: refreshError === null ? snapshot.status : "stale",
       accounts,
       accountCount: accounts.length,
       accountSelector,
@@ -80,6 +88,7 @@ export class AccountScoreService {
       availableCallOptions: this.config.monitor.recentCallOptions,
       databaseQueries: record(snapshot.collection)?.databaseQueries ?? null,
       queryDurationMs: record(snapshot.collection)?.queryDurationMs ?? null,
+      refreshError,
     };
   }
 
@@ -124,8 +133,8 @@ export class AccountScoreService {
   private async performRefresh(recentCallLimit: number, priority: Sub2ApiReadPriority): Promise<ScoreSnapshot> {
     const startedAt = new Date();
     this.snapshot = { ...this.snapshot, status: "refreshing", refreshStartedAt: startedAt.toISOString(), error: null };
-    if (this.snapshotStore) await this.snapshotStore.beginSnapshotRefresh(scoreSnapshotKey, scoreCacheVersion, startedAt.toISOString());
     try {
+      if (this.snapshotStore) await this.snapshotStore.beginSnapshotRefresh(scoreSnapshotKey, scoreCacheVersion, startedAt.toISOString());
       if (!this.reads) throw new Error("scores.refresh requires the Native API read executor");
       const probeEnd = new Date();
       const probeStart = new Date(probeEnd.getTime() - this.config.sub2api.scoreSamplePolicy.retentionHours * 3_600_000);

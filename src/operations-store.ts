@@ -668,7 +668,7 @@ export class OperationsStore {
   }
 
   async beginSnapshotRefresh(key: string, schemaVersion: string, startedAt: string) {
-    await this.sql`
+    await this.persistQuery(() => this.sql`
       INSERT INTO api2business_snapshots
         (snapshot_key, schema_version, refresh_started_at, last_error, updated_at)
       VALUES (${key}, ${schemaVersion}, ${startedAt}, NULL, now())
@@ -677,7 +677,7 @@ export class OperationsStore {
         refresh_started_at=EXCLUDED.refresh_started_at,
         last_error=NULL,
         updated_at=now()
-    `;
+    `);
   }
 
   async completeSnapshot(key: string, schemaVersion: string, payload: Record<string, unknown>, capturedAt: string) {

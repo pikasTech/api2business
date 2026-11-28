@@ -96,6 +96,69 @@ test("failed refresh preserves the payload but rejects the refresh operation", a
   });
 });
 
+test("rank returns the last successful snapshot when a refresh cannot start", async () => {
+  const stored: Record<string, unknown> = {
+    schema_version: "api-key-platform-ttft-v2",
+    payload: {
+      cacheVersion: "api-key-platform-ttft-v2",
+      ok: true,
+      status: "ready",
+      refreshedAt: "2026-08-05T01:00:00.000Z",
+      refreshStartedAt: null,
+      nextRefreshAt: "2026-08-05T01:05:00.000Z",
+      window: "最近 1,000 次",
+      groups: [],
+      accounts: [{
+        accountId: 478,
+        accountName: "https://rapidapi.cc pro",
+        platform: "openai",
+        accountType: "apikey",
+        status: "active",
+        schedulable: true,
+        priority: 195,
+        groupIds: [2],
+        groupNames: ["自用"],
+        successRequests: 51,
+        failureRequests: 0,
+        attributedRequests: 51,
+        failoverRequests: 0,
+        firstTokenSamples: 0,
+        selectedCalls: 51,
+        score: 72.3,
+      }],
+      error: null,
+      source: "postgresql-recent-account-calls",
+    },
+    refresh_started_at: null,
+    last_error: null,
+  };
+  const store = {
+    async getSnapshot() { return stored; },
+    async beginSnapshotRefresh() { throw Object.assign(new Error("snapshot begin timed out"), { name: "operations_read_timeout" }); },
+    async completeSnapshot() {},
+    async failSnapshotRefresh(_key: string, _schema: string, error: string) {
+      stored.last_error = error;
+    },
+  } satisfies ScoreSnapshotStore;
+  const config = {
+    monitor: { recentCallLimit: 1000, recentCallOptions: [1000], refreshIntervalMinutes: 5 },
+    sub2api: {
+      scorePolicy: {}, grokScorePolicy: {}, scoreSamplePolicy: {},
+      priorityPlan: { eligibleGroupIds: [2] }, grokPriorityPlan: { eligibleGroupIds: [2] },
+    },
+    operations: { upstreamSchedulingV2: { enabled: true, scopes: {} } },
+  };
+  const service = new AccountScoreService(config as never, "/tmp/api2business-unused-score-cache.json", {} as never, null, store);
+  const ranked = await service.rank(1000);
+  expect(ranked).toMatchObject({
+    ok: true,
+    status: "stale",
+    accountCount: 1,
+    refreshError: "snapshot begin timed out",
+  });
+  expect((ranked.accounts as Array<Record<string, unknown>>)[0]?.score).toBe(72.3);
+});
+
 test("rank refreshes the shared snapshot and both reads return the policy score", async () => {
   const policy = {
     reliabilityWeight: 48,
