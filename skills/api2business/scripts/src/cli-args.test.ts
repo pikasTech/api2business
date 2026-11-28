@@ -112,6 +112,21 @@ test("operation help returns action-specific contracts without loading config", 
   expect(String(rechargeCandidates?.verification)).toContain("recommendedCount");
   expect(rechargeCandidatesHelp()).toMatchObject({ ok: true, command: "upstreams recharge-candidates" });
 
+  const errorsAggregate = operationHelp(["errors", "aggregate", "--help"]);
+  expect(errorsAggregate).toMatchObject({ ok: true, command: "errors aggregate" });
+  expect(String(errorsAggregate?.usage)).toContain("--model");
+  expect(String(errorsAggregate?.verification)).toContain("签名");
+
+  const errorsDiagnose = operationHelp(["errors", "diagnose", "--model", "deepseek-v4.1-flash", "--help"]);
+  expect(errorsDiagnose).toMatchObject({ ok: true, command: "errors diagnose" });
+  expect(String(errorsDiagnose?.usage)).toContain("--request-id");
+  expect(String(errorsDiagnose?.verification)).toContain("topN");
+
+  const errorsList = operationHelp(["errors", "list", "--help"]);
+  expect(errorsList).toMatchObject({ ok: true, command: "errors list" });
+  expect(String(errorsList?.usage)).toContain("--start");
+  expect(String(errorsList?.verification)).toContain("probeRowsExcluded");
+
   const quotaSample = operationHelp(["upstreams", "quota-monitor", "sample", "--help"]);
   expect(quotaSample).toMatchObject({ ok: true, command: "upstreams quota-monitor sample" });
   expect(String(quotaSample?.usage)).toContain("--confirm");

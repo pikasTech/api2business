@@ -333,6 +333,69 @@ export function modelAliasHelp(): Record<string, unknown> {
   };
 }
 
+export function errorsAggregateHelp(): Record<string, unknown> {
+  return {
+    ok: true,
+    command: "errors aggregate",
+    usage: `${entry} --config <owning-YAML> errors aggregate [--start ISO --end ISO] [--limit N] [--top N] [--account <id-or-name>] [--group <id-or-exact-name>] [--model <exact-id>] --over-api <absolute-http(s)-URL> [--json]`,
+    options: {
+      "--config": configOption,
+      "--over-api": overApiOption,
+      "--start": "可选；与 --end 同时提供，按半开区间过滤错误样本",
+      "--end": "可选；不晚于当前时间，且必须晚于 --start",
+      "--limit": "可选；限制参与聚合的错误记录数",
+      "--top": "可选；限制返回的高频签名数",
+      "--account": "可选；按正整数账号 ID 或精确账号名过滤",
+      "--group": "可选；按正整数分组 ID 或精确分组名过滤",
+      "--model": "可选；按精确模型 ID 过滤",
+      "--json": jsonOption,
+    },
+    behavior: "只读聚合窗口内错误签名、恢复与切号证据，不读取请求正文或修改账号。探活流量默认排除。",
+    verification: "核对窗口、样本数、去重请求数、恢复数和签名分组；聚合结果不能替代单请求链核验。",
+  };
+}
+
+export function errorsDiagnoseHelp(): Record<string, unknown> {
+  return {
+    ok: true,
+    command: "errors diagnose",
+    usage: `${entry} --config <owning-YAML> errors diagnose [--start ISO --end ISO] [--request-id <request-id>] [--model <exact-id>] [--limit N] [--top N] [--account <id-or-name>] [--group <id-or-exact-name>] --over-api <absolute-http(s)-URL> [--json]`,
+    options: {
+      "--config": configOption,
+      "--over-api": overApiOption,
+      "--start": "可选；与 --end 同时提供，按半开区间过滤错误样本",
+      "--end": "可选；不晚于当前时间，且必须晚于 --start",
+      "--request-id": "可选；精确读取一个网关请求的错误链",
+      "--model": "可选；按精确模型 ID 定位错误链",
+      "--limit": "可选；限制参与诊断的错误记录数",
+      "--top": "可选；限制返回的展示链数，默认 50、上限 100",
+      "--account": "可选；按正整数账号 ID 或精确账号名过滤",
+      "--group": "可选；按正整数分组 ID 或精确分组名过滤",
+      "--json": jsonOption,
+    },
+    behavior: "只读返回错误尝试、最终签名、恢复与切号证据，不读取或改写业务请求。探活流量默认排除。",
+    verification: "单请求以 requestId 的完整链为准；窗口诊断的 topN 不是全窗链数，需结合 errors list 或逐请求 inspect。",
+  };
+}
+
+export function errorsListHelp(): Record<string, unknown> {
+  return {
+    ok: true,
+    command: "errors list",
+    usage: `${entry} --config <owning-YAML> errors list [--limit N] [--start ISO --end ISO] --over-api <absolute-http(s)-URL> [--json]`,
+    options: {
+      "--config": configOption,
+      "--over-api": overApiOption,
+      "--limit": "可选；限制返回的错误记录数",
+      "--start": "可选；与 --end 同时提供，按半开区间过滤错误记录",
+      "--end": "可选；不晚于当前时间，且必须晚于 --start",
+      "--json": jsonOption,
+    },
+    behavior: "只读列出错误记录并默认排除探活流量；不会把零命中解释为没有历史错误。",
+    verification: "核对窗口、记录总数、响应中的 probeRowsExcluded 与逐请求身份；需要恢复或切号结论时继续 errors diagnose 或 inspect。",
+  };
+}
+
 export function operationHelp(args: string[]): Record<string, unknown> | null {
   const position = (first: string, second?: string): number => args.findIndex((item, index) => item === first && (second === undefined || args[index + 1] === second));
   const actionAfter = (start: number, actions: readonly string[]): string | undefined => args.slice(start + 1).find((item) => actions.includes(item));
@@ -360,6 +423,13 @@ export function operationHelp(args: string[]): Record<string, unknown> | null {
   }
   const scores = position("scores", "rank");
   if (scores >= 0) return scoreRankHelp();
+  for (const action of ["aggregate", "diagnose", "list"] as const) {
+    if (position("errors", action) >= 0) {
+      if (action === "aggregate") return errorsAggregateHelp();
+      if (action === "diagnose") return errorsDiagnoseHelp();
+      return errorsListHelp();
+    }
+  }
   const modelsSync = position("upstreams", "models");
   if (modelsSync >= 0 && args[modelsSync + 2] === "sync") return upstreamWriteHelp("models sync");
   for (const action of ["recover", "status", "update"] as const) {
