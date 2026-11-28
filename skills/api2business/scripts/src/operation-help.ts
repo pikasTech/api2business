@@ -4,6 +4,7 @@ const configOption = "可选；Api2Business 仓库根自动读取 config/api2bus
 const overApiOption = "实际查询或写入必填；owning YAML 声明的绝对 HTTP(S) URL，不接受别名、布尔开关或隐式目标";
 const scopeOption = "可选；限定 owning YAML 中已配置的 scope，包括自定义 scope；生产排查应显式传入，避免把默认作用域当成所问作用域";
 const jsonOption = "输出结构化回执，便于 jq 只投影必要字段";
+const secretStdinOption = "只从 stdin 读取一行非空值；预览不读取，--confirm 才消费；进入 TTY 后按 Enter，管道需换行或 EOF；不接受 argv";
 
 export function priorityHistoryHelp(): Record<string, unknown> {
   return {
@@ -333,6 +334,96 @@ export function modelAliasHelp(): Record<string, unknown> {
   };
 }
 
+export function upstreamCreateHelp(): Record<string, unknown> {
+  return {
+    ok: true,
+    command: "upstreams create",
+    usage: `${entry} --config <owning-YAML> upstreams create --platform <platform> --base-url <https-url> --suffix <name> --groups <id,id,...> --api-key-stdin [--pool-mode true|false] [--rate <temporary-CNY/API_USD>] [--priority 1 --capacity 16 --recharge-cny <CNY>] [--confirm] --over-api <absolute-http(s)-URL> [--json]`,
+    options: {
+      "--config": configOption,
+      "--platform": "必填；openai、grok、anthropic、deepseek 或 gemini",
+      "--base-url": "必填；供应商 HTTPS origin，不静默回退到平台默认地址",
+      "--suffix": "必填；用于生成账号名的供应商后缀",
+      "--groups": "必填；实时解析出的业务分组 ID，逗号列表；不提供默认业务分组",
+      "--pool-mode": "可选；true 或 false，按平台模板与 owning policy 校验",
+      "--rate": "可选；创建后探测前的临时 CNY/API_USD 费率，不能替代最终费率回读",
+      "--priority": "可选；正整数账号优先级，默认 1",
+      "--capacity": "可选；正整数账号并发，默认 16",
+      "--recharge-cny": "可选；创建后充值的人民币金额",
+      "--api-key-stdin": secretStdinOption,
+      "--confirm": "执行确认；省略时只返回脱敏计划且不读取 stdin",
+      "--over-api": overApiOption,
+      "--json": jsonOption,
+    },
+    secretInput: {
+      flag: "--api-key-stdin",
+      format: "恰好一行非空 API key；管道多行会失败，不静默截断",
+      pipe: `printf '%s\\n' "$API_KEY" | ${entry} --config <owning-YAML> upstreams create <required-options> --api-key-stdin --confirm --over-api <absolute-http(s)-URL>`,
+      terminal: "按 Enter 提交；没有换行时用 Ctrl-D 结束输入",
+      boundary: "密钥不得进入 argv、帮助输出、日志或回执",
+    },
+    behavior: "默认预览；--confirm 只读取一次 stdin 密钥并提交上游创建、费率探测、分组、切号模板和探活初始化。",
+    verification: "保留 workflow ID，使用 upstreams status --id <workflow-id> 追到终态，再分别回读配置、Secret presence 和实际探活结果。",
+  };
+}
+
+export function upstreamTemplateHelp(): Record<string, unknown> {
+  return {
+    ok: true,
+    command: "upstreams template",
+    usage: `${entry} --config <owning-YAML> upstreams template [--accounts <id-or-range,...>] [--confirm] --over-api <absolute-http(s)-URL> [--json]`,
+    options: {
+      "--config": configOption,
+      "--accounts": "可选；正整数账号 ID、逗号列表或范围。单平台更新必须传该平台全部未删除 API-key 账号",
+      "--confirm": "执行确认；省略时只返回目标账号、平台与 mutation=false 计划",
+      "--over-api": overApiOption,
+      "--json": jsonOption,
+    },
+    behavior: "默认预览；--confirm 按账号所属平台应用切号模板，提交异步作业。未传 --accounts 时会覆盖全部已配置模板平台，不能用于单平台更新。",
+    verification: "用 upstreams status --id <workflow-id> 和同一绝对 URL 核对 targetCount、appliedCount、verifiedCount、failedCount、misalignedCount，再按平台无缓存回读规则和未改平台边界。",
+  };
+}
+
+export function upstreamListHelp(): Record<string, unknown> {
+  return {
+    ok: true,
+    command: "upstreams list",
+    usage: `${entry} --config <owning-YAML> upstreams list [--page <positive-integer>] [--search <text>] --over-api <absolute-http(s)-URL> [--json]`,
+    options: {
+      "--config": configOption,
+      "--page": "可选；正整数页码，省略时为第 1 页",
+      "--search": "可选；对上游账号列表进行有界搜索",
+      "--over-api": overApiOption,
+      "--json": jsonOption,
+    },
+    behavior: "只读查询上游账号分页列表，不创建账号、不修改调度、不读取或输出 API key。",
+    verification: "核对分页元数据、搜索条件和账号 ID；列表摘要不能替代单账号 credentials、分组、模板和探活回读。",
+  };
+}
+
+export function upstreamsGroupHelp(): Record<string, unknown> {
+  return {
+    ok: true,
+    command: "upstreams",
+    usage: `${entry} --config <owning-YAML> upstreams <operation> [options] --over-api <absolute-http(s)-URL> [--json]`,
+    operationHelp: [
+      "upstreams create --help",
+      "upstreams template --help",
+      "upstreams list --help",
+      "upstreams update --help",
+      "upstreams recover --help",
+      "upstreams status --help",
+      "upstreams models sync --help",
+      "upstreams model-alias --help",
+      "upstreams usage --help",
+      "upstreams usage-cache --help",
+      "upstreams recharge-candidates --help",
+      "upstreams quota-monitor sample --help",
+    ],
+    behavior: "操作级帮助是参数真相；查看帮助不加载配置、不读取 stdin、不连接运行面。未知操作帮助返回失败，不回退整份根命令表。",
+  };
+}
+
 export function errorsAggregateHelp(): Record<string, unknown> {
   return {
     ok: true,
@@ -440,5 +531,21 @@ export function operationHelp(args: string[]): Record<string, unknown> | null {
   const usageCache = position("upstreams", "usage-cache");
   if (usageCache >= 0 && args[usageCache + 2] !== "restore") return upstreamsUsageCacheHelp();
   if (position("upstreams", "recharge-candidates") >= 0) return rechargeCandidatesHelp();
+  const upstreams = args.indexOf("upstreams");
+  if (upstreams >= 0) {
+    const knownActions = new Set(["list", "capacity", "usage", "models", "model-alias", "usage-cache",
+      "quota-summary", "quota-monitor", "recharge-candidates", "benchmark", "benchmark-status",
+      "benchmark-history", "template", "initialize", "isolation", "create", "update", "recharge",
+      "recharge-status", "recover", "pause", "status"]);
+    const firstAction = args[upstreams + 1];
+    if (firstAction && !firstAction.startsWith("-") && !knownActions.has(firstAction)) {
+      throw new Error(`unknown upstreams operation ${firstAction}; run upstreams --help to choose a supported operation`);
+    }
+    const action = actionAfter(upstreams, ["create", "template", "list"] as const);
+    if (action === "create") return upstreamCreateHelp();
+    if (action === "template") return upstreamTemplateHelp();
+    if (action === "list") return upstreamListHelp();
+    return upstreamsGroupHelp();
+  }
   return null;
 }

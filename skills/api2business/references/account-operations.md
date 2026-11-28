@@ -39,6 +39,8 @@
 - 每次 `continue --confirm` 或 `retry --stage <stage> --confirm` 只推进一个阶段。
   - 阶段依次为 `health`、可选 `reclaim`、`status`、`download`、`import-submit`、`import-status`、`verify`。
   - 仅公开服务阶段经 `--card-code-stdin` 接收兑换码；兑换码不写入作业、日志或输出。
+  - Secret stdin 的单行、确认、TTY 与管道边界以
+    [CLI 工作区合同](../SKILL.md#工作区) 为准。
 - 创建时冻结并对新副本继承优先级、并发、负载因子、计费倍率、分组、代理、过期暂停、状态和可调度状态。
 - 导入后只对新建副本回读这些字段；未创建新副本或任一字段不一致时，作业失败，原账号不受影响。
 - 复活副本允许与现有 OAuth 凭据相同，但只在 `cutoffTrigger=public-recovery` 场景启用该重复导入语义。

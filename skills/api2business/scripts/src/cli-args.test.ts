@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { assertErrorsQueryBounds, assertObservationWindow, assertSchedulingRuntimeQuery, normalizeCliArgs, parseArgs, poolQualityScope, priorityHistoryDiagnostics, selectPriorityHistory, summarizeWorkflowStatus } from "./cli";
+import { assertErrorsQueryBounds, assertObservationWindow, assertSchedulingRuntimeQuery, normalizeCliArgs, parseArgs, poolQualityScope, priorityHistoryDiagnostics, readSecretLine, selectPriorityHistory, summarizeWorkflowStatus } from "./cli";
 import { operationHelp, priorityHistoryHelp, rechargeCandidatesHelp, upstreamsUsageCacheHelp, upstreamsUsageHelp, upstreamWriteHelp } from "./operation-help";
 import { webProbeElementArgs } from "./web-screenshot";
 
@@ -131,6 +131,46 @@ test("operation help returns action-specific contracts without loading config", 
   expect(quotaSample).toMatchObject({ ok: true, command: "upstreams quota-monitor sample" });
   expect(String(quotaSample?.usage)).toContain("--confirm");
   expect(String(quotaSample?.verification)).toContain("sampledAt");
+});
+
+test("upstream operation help stays scoped instead of returning the root command table", () => {
+  const create = operationHelp(["upstreams", "create", "--help"]);
+  expect(create).toMatchObject({ ok: true, command: "upstreams create" });
+  expect(create?.secretInput).toMatchObject({ flag: "--api-key-stdin" });
+  expect(JSON.stringify(create)).toContain("恰好一行非空");
+  expect(create?.commands).toBeUndefined();
+
+  const template = operationHelp(["upstreams", "template", "-h"]);
+  expect(template).toMatchObject({ ok: true, command: "upstreams template" });
+  expect(String(template?.verification)).toContain("misalignedCount");
+  expect(template?.commands).toBeUndefined();
+
+  const list = operationHelp(["upstreams", "list", "--help"]);
+  expect(list).toMatchObject({ ok: true, command: "upstreams list" });
+  expect(String(list?.behavior)).toContain("只读");
+  expect(list?.commands).toBeUndefined();
+  expect(() => operationHelp(["upstreams", "not-an-action", "--help"]))
+    .toThrow("unknown upstreams operation not-an-action");
+});
+
+test("secret stdin accepts one line and rejects empty or ambiguous input", async () => {
+  const nonInteractive = (text: string) => ({
+    interactive: false,
+    text: async () => text,
+    stream: () => { throw new Error("stream must not be read in non-interactive mode"); },
+  });
+  expect(await readSecretLine("--api-key-stdin", nonInteractive("  one-line-secret  \n"))).toBe("one-line-secret");
+  await expect(readSecretLine("--api-key-stdin", nonInteractive(""))).rejects.toThrow("empty stdin");
+  await expect(readSecretLine("--api-key-stdin", nonInteractive("first\nsecond\n"))).rejects.toThrow("2 non-empty lines");
+
+  const encoder = new TextEncoder();
+  const interactive = (text: string) => ({
+    interactive: true,
+    text: async () => { throw new Error("text must not be read in interactive mode"); },
+    stream: () => new ReadableStream<Uint8Array>({ start(controller) { controller.enqueue(encoder.encode(text)); controller.close(); } }),
+  });
+  expect(await readSecretLine("--api-key-stdin", interactive("one-line-secret\nignored-after-enter\n"))).toBe("one-line-secret");
+  await expect(readSecretLine("--api-key-stdin", interactive("one-line-secret"))).resolves.toBe("one-line-secret");
 });
 
 test("priority history scope keeps matching rounds and discloses omissions", () => {

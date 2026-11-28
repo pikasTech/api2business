@@ -40,10 +40,17 @@ description: >-
 - 使用 `config/api2business.yaml` 保存唯一 L1 的运行配置；该文件不得提交。
 - 业务和生命周期入口固定为 `skills/api2business/scripts/api2business-cli.ts`；
   不使用 `src/cli.ts`。
-- 某组命令的参数或复验方式不确定时，先执行 `<command> --help`；操作帮助不加载配置、
-  不连接运行面。
-  - `accounts idle-probe`、`upstream-scheduling-v2` 和 `scores rank` 均提供操作级帮助；
-    不能用根命令表猜参数或确认语义。
+- 命令参数或复验方式不确定时，执行完整动作路径的 `<command> --help` 或 `-h`。
+  - 操作帮助只展示所选动作，不加载配置、不读取 stdin、不连接运行面。
+  - 未知动作帮助返回非零和纠正入口，不回退整份根命令表。
+  - `upstreams create|template|list`、`accounts idle-probe`、
+    `upstream-scheduling-v2` 和 `scores rank` 都必须使用动作级帮助获取参数。
+- Secret stdin 的统一合同适用于 `--api-key-stdin`、`--ticket-stdin`、`--code-stdin`
+  和 `--card-code-stdin`。
+  - 预览模式不读取 stdin；只有执行确认才消费。
+  - 期望恰好一行非空值；TTY 按 Enter 提交，管道用换行或 EOF 结束。
+  - 空输入或管道多行输入直接失败并说明原因，不静默取首行或空值。
+  - Secret 不得进入 argv、帮助输出、日志或业务回执。
 
 ## 从零部署（Bootstrap）
 
@@ -266,6 +273,7 @@ bun skills/api2business/scripts/api2business-cli.ts --config config/api2business
     [转接 API-key 上游策略](../../docs/specs/upstream-management.md#转接-api-key-上游策略)。
 - 新增上游、探活、切号和 Codex 强制 Responses 使用
   [新上游初始化](references/upstream-scheduling.md#新上游初始化)。
+  - 首次执行前用 `upstreams create --help` 查看动作参数和 Secret stdin 合同。
   - 创建自动执行；补齐使用 `upstreams initialize --accounts <id,id,...> [--confirm]`。
   - 两者都显式携带 `--over-api <绝对 http(s) URL>`；终态使用 `upstreams status`。
   - 状态默认显示配置与探活摘要；追加 `--json` 查看完整结果。

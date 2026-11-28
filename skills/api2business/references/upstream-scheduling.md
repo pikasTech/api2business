@@ -1060,6 +1060,8 @@
 ## 新上游初始化
 
 - `upstreams create` 在同一个 Temporal 作业中完成账号创建、倍率探测和初始化。
+  - 动作参数和 Secret stdin 的共同合同以
+    [CLI 工作区合同](../SKILL.md#工作区) 为准；先执行 `upstreams create --help`。
   - CLI 必须显式传入平台、实时解析的业务分组及 `--api-key-stdin`。
   - 预览不读取 Secret；只有 `--confirm` 才从标准输入读取密钥。
   - 创建所需占位费率来自 owning YAML，省略 `--rate` 后自动探测并回写。

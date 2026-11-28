@@ -199,6 +199,51 @@ function value(args: string[], name: string, signedNumber = false): string | nul
   return result;
 }
 
+interface SecretInputReader {
+  interactive: boolean;
+  text: () => Promise<string>;
+  stream: () => ReadableStream<Uint8Array>;
+}
+
+function validateSecretLine(flag: string, raw: string): string {
+  const normalized = raw.trim();
+  if (!normalized) {
+    throw new Error(`${flag} received empty stdin; provide exactly one non-empty line on stdin and never pass the secret in argv`);
+  }
+  return normalized;
+}
+
+export async function readSecretLine(flag: string, input?: SecretInputReader): Promise<string> {
+  const source = input ?? {
+    interactive: Boolean(process.stdin.isTTY),
+    text: () => Bun.stdin.text(),
+    stream: () => Bun.stdin.stream(),
+  };
+  if (!source.interactive) {
+    const lines = (await source.text()).split(/\r?\n/u).map((line) => line.trim()).filter(Boolean);
+    if (lines.length > 1) throw new Error(`${flag} received ${lines.length} non-empty lines; provide exactly one line so no secret is silently ignored`);
+    return validateSecretLine(flag, lines[0] ?? "");
+  }
+
+  const reader = source.stream().getReader();
+  const decoder = new TextDecoder();
+  let buffered = "";
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (value) buffered += decoder.decode(value, { stream: true });
+      const newline = buffered.search(/[\r\n]/u);
+      if (newline >= 0) return validateSecretLine(flag, buffered.slice(0, newline));
+      if (done) {
+        buffered += decoder.decode();
+        return validateSecretLine(flag, buffered);
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+
 export function normalizeCliArgs(args: string[], defaultConfigPath: string | null): string[] {
   if (defaultConfigPath === null || args.includes("--config")) return args;
   return ["--config", defaultConfigPath, ...args];
@@ -433,8 +478,7 @@ async function bugTeamCommand(parsed: Parsed, config: ReturnType<typeof loadConf
     if (directActions.has(action ?? "") && (action !== "status" || parsed.baseUrl !== null)) {
       if (!parsed.baseUrl) throw new Error("bugteam public-recovery requires --base-url");
       if (!parsed.codeStdin) throw new Error("bugteam public-recovery requires --card-code-stdin; the redemption code is never accepted in argv");
-      const cardCode = (await Bun.stdin.text()).trim();
-      if (!cardCode) throw new Error("--card-code-stdin received empty stdin");
+      const cardCode = await readSecretLine("--card-code-stdin");
       const client = new PublicRecoveryClient(parsed.baseUrl, config.bugTeam.requestTimeoutMs);
       if (action === "health") return await client.health(cardCode);
       if (action === "status") return await client.status(cardCode);
@@ -487,12 +531,11 @@ async function bugTeamCommand(parsed: Parsed, config: ReturnType<typeof loadConf
       const nextStage = (stage ?? job.nextStage) as RecoveryStage | null;
       const needsCode = PublicRecoveryJobManager.requiresCode(nextStage);
       if (needsCode && !parsed.codeStdin) throw new Error(`stage ${nextStage} requires --card-code-stdin`);
-      const cardCode = parsed.codeStdin ? (await Bun.stdin.text()).trim() : "";
-      if (needsCode && !cardCode) throw new Error("--card-code-stdin received empty stdin");
+      const cardCode = parsed.codeStdin ? await readSecretLine("--card-code-stdin") : "";
       return await manager.launch(job, parsed.configPath, cardCode, action === "retry" ? nextStage ?? undefined : undefined);
     }
     if (action === "worker") {
-      const cardCode = parsed.codeStdin ? (await Bun.stdin.text()).trim() : "";
+      const cardCode = parsed.codeStdin ? await readSecretLine("--card-code-stdin") : "";
       const stage = parsed.stage as RecoveryStage | null;
       if (!stage) throw new Error("public-recovery worker requires --stage");
       return await manager.run(job.id, cardCode, stage);
@@ -542,13 +585,13 @@ async function bugTeamCommand(parsed: Parsed, config: ReturnType<typeof loadConf
   if (action === "recoveries" && subaction === "claim") {
     if (!parsed.id || !parsed.output || !parsed.ticketStdin) throw new Error("bugteam recoveries claim requires --id --output --ticket-stdin");
     if (!parsed.confirm) return { ok: true, mutation: false, action: "bugteam-recovery-claim", recoveryId: parsed.id, output: parsed.output, hint: "add --confirm to execute" };
-    const ticket = (await Bun.stdin.text()).trim();
+    const ticket = await readSecretLine("--ticket-stdin");
     return await client.claim(parsed.id, ticket, parsed.idempotencyKey ?? `bugteam-recovery-${parsed.id}`, parsed.output);
   }
   if (action === "redeem") {
     if (!parsed.codeStdin) throw new Error("bugteam redeem requires --code-stdin");
     if (!parsed.confirm) return { ok: true, mutation: false, action: "bugteam-redeem", hint: "add --confirm to execute" };
-    const code = (await Bun.stdin.text()).trim();
+    const code = await readSecretLine("--code-stdin");
     if (!code) throw new Error("--code-stdin received empty stdin");
     return await client.redeem(code, parsed.idempotencyKey ?? `bugteam-redeem-${crypto.randomUUID()}`);
   }
@@ -1121,8 +1164,7 @@ async function remote(parsed: Parsed, config: ReturnType<typeof loadConfig>, tar
       },
       hint: "add --confirm to execute",
     };
-    const apiKey = (await Bun.stdin.text()).trim();
-    if (!apiKey) throw new Error("--api-key-stdin received empty stdin");
+    const apiKey = await readSecretLine("--api-key-stdin");
     return await client.upstreamCreate({ ...input, apiKey }, `upstream-create-${crypto.randomUUID()}`);
   }
   if (group === "upstreams" && action === "update") {
@@ -1621,11 +1663,12 @@ function aggregateSmoke(): Record<string, unknown> {
 
 export async function runCli(args: string[]): Promise<void> {
   const wantsJson = args.includes("--json");
+  const wantsHelp = args.includes("--help") || args.includes("-h");
   try {
-    const selectedOperationHelp = args.includes("--help") ? operationHelp(args) : null;
+    const selectedOperationHelp = wantsHelp ? operationHelp(args) : null;
     if (selectedOperationHelp) return emit(selectedOperationHelp, wantsJson);
-    if (args.includes("--help") && args.some((item, index) => item === "priority" && args[index + 1] === "history")) return emit(priorityHistoryHelp(), wantsJson);
-    if (args.includes("--help") && args.some((item, index) => item === "upstreams" && args[index + 1] === "initialize")) {
+    if (wantsHelp && args.some((item, index) => item === "priority" && args[index + 1] === "history")) return emit(priorityHistoryHelp(), wantsJson);
+    if (wantsHelp && args.some((item, index) => item === "upstreams" && args[index + 1] === "initialize")) {
       return emit({ ok: true, command: "upstreams initialize",
         usage: "bun skills/api2business/scripts/api2business-cli.ts --config <owning-YAML> upstreams initialize --accounts <id-or-range,...> [--confirm] --over-api <absolute-http(s)-URL> [--json]",
         behavior: "预览不写入；确认后异步补齐同平台切号模板、私有探活及 Codex 强制 Responses，并执行一次手动探活。",
@@ -1633,23 +1676,30 @@ export async function runCli(args: string[]): Promise<void> {
         retry: "重试使用原账号 ID，无需供应商密钥；不会重建账号或并入默认业务分组。",
       }, wantsJson);
     }
-    if (args.includes("--help") && args.some((item, index) => item === "upstreams" && args[index + 1] === "capacity")) {
+    if (wantsHelp && args.some((item, index) => item === "upstreams" && args[index + 1] === "capacity")) {
       return emit({ ok: true, command: "upstreams capacity",
         usage: "bun skills/api2business/scripts/api2business-cli.ts --config <owning-YAML> upstreams capacity --scope <configured-scope> [--capacity <owning-YAML-value>] [--confirm] --over-api <absolute-http(s)-URL> [--json]",
         behavior: "默认预览；--confirm 读取该作用域全部分组成员，批量写入 owning YAML 的 accountCapacity，并逐账号回读。",
         boundary: "该命令只设置每个账号的原生 concurrency，不创建分组级全局并发门，也不修改其他作用域。",
       }, wantsJson);
     }
-    if (args.includes("--help") && args.includes("native")) return emit(nativeHelp(args[args.indexOf("native") + 1]), wantsJson);
-    if (args.includes("--help") && args.some((item, index) => item === "upstreams" && args[index + 1] === "usage")) return emit(upstreamsUsageHelp(), wantsJson);
-    if (args.includes("--help") && args.some((item, index) => item === "upstreams" && args[index + 1] === "usage-cache" && args[index + 2] === "restore")) return emit(historicalBalanceHelp(), wantsJson);
-    if (args.includes("--help") && args.includes("web") && args[args.indexOf("web") + 1] === "screenshot") return emit(webScreenshotHelp(), wantsJson);
-    if (args.includes("--help") && args.includes("gateway")) return emit({ ok: true,
+    if (wantsHelp && args.includes("native")) return emit(nativeHelp(args[args.indexOf("native") + 1]), wantsJson);
+    if (wantsHelp && args.some((item, index) => item === "upstreams" && args[index + 1] === "usage")) return emit(upstreamsUsageHelp(), wantsJson);
+    if (wantsHelp && args.some((item, index) => item === "upstreams" && args[index + 1] === "usage-cache" && args[index + 2] === "restore")) return emit(historicalBalanceHelp(), wantsJson);
+    if (wantsHelp && args.includes("web") && args[args.indexOf("web") + 1] === "screenshot") return emit(webScreenshotHelp(), wantsJson);
+    if (wantsHelp && args.includes("gateway")) return emit({ ok: true,
       commands: ["gateway service-policy [--confirm] --over-api <absolute-http(s)-URL> [--json]"],
       behavior: "默认预览；--confirm 提交异步作业，再用 workflow status 查询终态。--json 展开分组。",
     }, wantsJson);
-    if (args.includes("--help") && args.includes("observability")) return emit(observabilityHelp,wantsJson);
-    if (args.includes("--help") || args.length === 0) return emit(help(), wantsJson);
+    if (wantsHelp && args.includes("observability")) return emit(observabilityHelp,wantsJson);
+    if (wantsHelp) {
+      const requested = args.filter((item) => item !== "--help" && item !== "-h").join(" ");
+      emit({ ok: false, error: "operation_help_not_found", command: requested,
+        next: "run the root --help command to choose a supported operation; operation help never falls back to the full command table" }, wantsJson);
+      process.exitCode = 1;
+      return;
+    }
+    if (args.length === 0) return emit(help(), wantsJson);
     const defaultConfigPath = existsSync("config/api2business.yaml") ? "config/api2business.yaml" : null;
     const parsed = parseArgs(normalizeCliArgs(args, defaultConfigPath));
     if (parsed.cacheOnly && parsed.refresh) throw new Error("--refresh 与 --cache-only 不能同时使用");
