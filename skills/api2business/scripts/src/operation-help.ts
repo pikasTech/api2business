@@ -528,6 +528,7 @@ export function operationHelp(args: string[]): Record<string, unknown> | null {
   }
   const modelAlias = position("upstreams", "model-alias");
   if (modelAlias >= 0) return modelAliasHelp();
+  if (position("upstreams", "usage") >= 0) return upstreamsUsageHelp();
   const usageCache = position("upstreams", "usage-cache");
   if (usageCache >= 0 && args[usageCache + 2] !== "restore") return upstreamsUsageCacheHelp();
   if (position("upstreams", "recharge-candidates") >= 0) return rechargeCandidatesHelp();

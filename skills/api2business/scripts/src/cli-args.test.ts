@@ -100,6 +100,7 @@ test("operation help returns action-specific contracts without loading config", 
   expect(String(usage.usage)).toContain("--accounts");
   expect(String(usage.verification)).toContain("quotaWindowCoverage");
   expect(JSON.stringify(usage)).toContain("workflow status");
+  expect(operationHelp(["upstreams", "usage", "--help"])).toMatchObject({ command: "upstreams usage" });
 
   const usageCache = operationHelp(["upstreams", "usage-cache", "--help"]);
   expect(usageCache).toMatchObject({ ok: true, command: "upstreams usage-cache" });
